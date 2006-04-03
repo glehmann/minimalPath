@@ -76,5 +76,17 @@ ENDIF(BUILD_TESTING)
 #any tests you can comment out or delete the following line.
 # ADD_TEST(Testname ExecutableToRun arg1 arg2 arg3)
 
-ADD_TEST(Run check ${INPUT_IMAGE} out.png)
-ADD_TEST(CompareImage ${IMAGE_COMPARE} out.png ${CMAKE_SOURCE_DIR}/images/test.png)
+#ADD_TEST(Run check ${INPUT_IMAGE} out.png)
+#ADD_TEST(CompareImage ${IMAGE_COMPARE} out.png ${CMAKE_SOURCE_DIR}/images/test.png)
+
+ADD_TEST (basicPath testPath ${CMAKE_SOURCE_DIR}/images/inv_cthead.tif ${CMAKE_SOURCE_DIR}/images/markers.tif 1 basicPathMarker.png basicPathOv.png)
+
+ADD_TEST (basicPathB testPath ${CMAKE_SOURCE_DIR}/images/cthead1.png ${CMAKE_SOURCE_DIR}/images/markers.tif 1 basicPathBMarker.png basicPathBOv.png)
+
+ADD_TEST (basicPathM testPath ${CMAKE_SOURCE_DIR}/images/inv_cthead.tif ${CMAKE_SOURCE_DIR}/images/marker3.tif 1 basicPathMMarker.png basicPathMOv.png 1 2 3 1)
+
+## Regression tests
+ADD_TEST (regression1 ${IMAGE_COMPARE} basicPathOv.png ${CMAKE_SOURCE_DIR}/ImageResults/basicPathOv.png)
+ADD_TEST (regression2 ${IMAGE_COMPARE} basicPathBOv.png ${CMAKE_SOURCE_DIR}/ImageResults/basicPathBOv.png)
+ADD_TEST (regression3 ${IMAGE_COMPARE} basicPathMOv.png ${CMAKE_SOURCE_DIR}/ImageResults/basicPathMOv.png)
+

@@ -61,6 +61,7 @@ public:
   /** A type to support a set of labels, rather than just start and
    * end */
   typedef typename std::vector<LabelImagePixelType> LabelVectorType;
+  typedef typename std::vector<CostPixType> CostVectorType;
 
   /** ImageDimension constants */
   itkStaticConstMacro(ImageDimension, unsigned int,
@@ -123,9 +124,15 @@ public:
   {
     m_LabelChain = LV;
   }
+
   const LabelVectorType & GetLabelChain() const
   {
     return m_LabelChain;
+  }
+
+  const CostVectorType & GetCosts() const
+  {
+    return m_CostVector;
   }
 
 
@@ -172,8 +179,9 @@ private:
   bool m_FullyConnected;
   LabelImagePixelType m_StartLabel, m_EndLabel, m_MarkLabel;
   LabelVectorType m_LabelChain;
+  CostVectorType m_CostVector;
   CostPixType m_UnitCost;
-
+  
   typedef ConstShapedNeighborhoodIterator<InputImageType> CNInputIterator;
   typedef std::vector<CostPixType> WeightArrayType;
 

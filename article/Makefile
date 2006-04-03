@@ -1,6 +1,6 @@
 
 # you should use the title of the article instead
-ARTICLE_TITLE = A Great Article For The Insight Journal
+ARTICLE_TITLE = Minimal Path Image Filter
 
 # spaces are not allowed
 empty:=
@@ -11,13 +11,13 @@ NAME = Article
 
 BIBS=$(wildcard *.bib)
 
-PNGS=$(notdir $(wildcard ../images/*.png))
-JPGS=$(notdir $(wildcard ../images/*.jpg))
-DIAS=$(notdir $(wildcard ../images/*.dia))
-FIGS=$(notdir $(wildcard ../images/*.fig))
-EPSS=$(notdir $(wildcard ../images/*.eps))
-TIFS=$(notdir $(wildcard ../images/*.tif))
-PLOTS=$(notdir $(wildcard ../images/*.gnuplot))
+PNGS=$(notdir $(wildcard ../ImageResults/*.png))
+JPGS=$(notdir $(wildcard ../ImageResults/*.jpg))
+DIAS=$(notdir $(wildcard ../ImageResults/*.dia))
+FIGS=$(notdir $(wildcard ../ImageResults/*.fig))
+EPSS=$(notdir $(wildcard ../ImageResults/*.eps))
+TIFS=$(notdir $(wildcard ../ImageResults/*.tif))
+PLOTS=$(notdir $(wildcard ../ImageResults/*.gnuplot))
 
 OUTPUT_EPS=$(PNGS:png=eps) $(JPGS:jpg=eps) $(DIAS:dia=eps) $(FIGS:fig=eps) $(TIFS:tif=eps) $(PLOTS:gnuplot=eps) $(EPSS)
 
@@ -31,26 +31,26 @@ bbl: ${NAME}.bbl
 eps: $(OUTPUT_EPS)
 
 
-%.eps: ../images/%.png
+%.eps: ../ImageResults/%.png
 	convert $< $@
 
-%.eps: ../images/%.jpg
+%.eps: ../ImageResults/%.jpg
 	convert $< $@
 
-%.eps: ../images/%.dia
+%.eps: ../ImageResults/%.dia
 	dia --nosplash -e $@ $<
 
-%.eps: ../images/%.fig
+%.eps: ../ImageResults/%.fig
 	fig2dev -L eps $< $@
 
-%.eps: ../images/%.gnuplot
+%.eps: ../ImageResults/%.gnuplot
 	gnuplot $< > $@
 
 
 ${NAME}.ps: ${NAME}.dvi
 	dvips -R0 -o ${NAME}.ps ${NAME}.dvi
 
-%.eps: ../images/%.tif
+%.eps: ../ImageResults/%.tif
 	convert $< $@
 
 

@@ -88,6 +88,7 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   if (m_LabelChain.size() < 2)
     {
     // exception - not enough labels set
+    itkExceptionMacro(<< "Insufficient markers set - need at least start and end values");
     }
   if (m_MarkLabel == 0)
     {
@@ -95,6 +96,8 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
     m_MarkLabel = m_LabelChain[0];
     }
 
+  // reset the cost vector
+  m_CostVector.assign(0, 0.0);
   for (int i=0;i<m_LabelChain.size()-1;i++)
     {
     ComputeLink(m_LabelChain[i], m_LabelChain[i+1], 
@@ -215,11 +218,12 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   if (!FoundStart)
     {
     // exception - failed to find start label
+    itkExceptionMacro(<< "Failed to find start label");
     }
 
   if (!FoundEnd)
     {
-    // exception - failed to find end label
+    itkExceptionMacro( << "Failed to find end label");
     }
 
   PixPriorityType TopPix;
@@ -234,8 +238,12 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
     labIt.SetIndex(TopPix.location);
     LabelImagePixelType ThisLab = labIt.Get();
     // check the label value - if it is EndValue, we are done.
-    if (ThisLab == EndLabel) break;
-
+    if (ThisLab == EndLabel) 
+      {
+      // record the cost 
+      m_CostVector.push_back(TopPix.priority);
+      break;
+      }
     CostPixType ThisCost = costIt.Get();
     // std::cout << TopPix.location << " " << (int)ThisLab << " " << TopPix.priority << std::endl;
     if (TopPix.priority < ThisCost)

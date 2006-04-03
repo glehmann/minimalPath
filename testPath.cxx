@@ -5,8 +5,9 @@
 #include "itkMinimalPathImageFilter.h"
 #include "itkSimpleFilterWatcher.h"
 #include "itkTimeProbe.h"
+#include "itkLabelOverlayImageFilter.h"
 
-int main(int, char * argv[])
+int main(int argc, char * argv[])
 {
 
   const int dim = 2;
@@ -30,19 +31,29 @@ int main(int, char * argv[])
   path->SetMarkerImage(reader2->GetOutput());
   //itk::SimpleFilterWatcher watcher(path, "path");
 
+  int repeats = atoi(argv[3]);
+
   MinPathType::LabelVectorType order;
-  order.push_back(1);
-  order.push_back(2);
-  order.push_back(3);
-  order.push_back(1);
+  if (argc > 6)
+    {
+    for (int i = 6; i < argc;i++)
+      {
+      int v = atoi(argv[i]);
+      order.push_back(v);
+      }
+    } 
+  else
+    {
+    std::cout << "Using labels 1 and 2" << std::endl;
+    order.push_back(1);
+    order.push_back(2);
+    }
   path->SetLabelChain(order);
 
-//  path->SetStartLabel(1);
-//  path->SetEndLabel(2);
 
   itk::TimeProbe ltime;
   
-  for (int i = 0;i<100;i++) 
+  for (int i = 0;i<repeats;i++) 
     {
     ltime.Start();
     path->Update();
@@ -53,14 +64,33 @@ int main(int, char * argv[])
   std::cout << std::setprecision(3) << "Path time : " 
             << ltime.GetMeanTime() << std::endl;
 
-  typedef itk::ImageFileWriter< IType > WriterType;
-  WriterType::Pointer writer = WriterType::New();
-  std::cout << "writing " << argv[3] << std::endl;
-  writer->SetFileName( argv[3] );
-  writer->SetInput(path->GetOutput());
-  writer->Update();
+  const MinPathType::CostVectorType CV = path->GetCosts();
+  MinPathType::CostVectorType::const_iterator CVIt;
+  for (CVIt = CV.begin();CVIt!=CV.end();CVIt++)
+    {
+    std::cout << std::setprecision(3) << "Path cost : " << *CVIt << std::endl;
+    }
 
-  
+  // set up the overlay here
+  typedef itk::RGBPixel<unsigned char> CPType;
+  typedef itk::Image< CPType, dim > RGBType;
+
+  typedef itk::LabelOverlayImageFilter<IType, IType, RGBType> OvType;
+  OvType::Pointer OvFilt = OvType::New();
+  OvFilt->SetInput(reader->GetOutput());
+  OvFilt->SetLabelImage(path->GetOutput());
+  OvFilt->SetOpacity(1);
+  typedef itk::ImageFileWriter< RGBType > RGBWriterType;
+  RGBWriterType::Pointer  RGBwriter =  RGBWriterType::New();
+
+  RGBwriter->SetInput(OvFilt->GetOutput());
+  RGBwriter->SetFileName(argv[5]);
+  RGBwriter->Update();
+
+  // save a marker image
+  OvFilt->SetLabelImage(reader2->GetOutput());
+  RGBwriter->SetFileName(argv[4]);
+  RGBwriter->Update();
 
   return 0;
 }
