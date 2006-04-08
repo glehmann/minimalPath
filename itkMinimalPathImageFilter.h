@@ -143,6 +143,9 @@ public:
   itkSetMacro(UnitCost, CostPixType);
   itkGetConstReferenceMacro(UnitCost, CostPixType);
 
+  itkSetMacro(Direction, int);
+  itkGetConstReferenceMacro(Direction, int);
+
 protected:
   MinimalPathImageFilter();
   ~MinimalPathImageFilter() {};
@@ -181,7 +184,8 @@ private:
   LabelVectorType m_LabelChain;
   CostVectorType m_CostVector;
   CostPixType m_UnitCost;
-  
+  int m_Direction;
+
   typedef ConstShapedNeighborhoodIterator<InputImageType> CNInputIterator;
   typedef std::vector<CostPixType> WeightArrayType;
 

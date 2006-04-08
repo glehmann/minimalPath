@@ -21,6 +21,7 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   m_StartLabel = 1;
   m_EndLabel = 2;
   m_MarkLabel = 0;
+  m_Direction = -1;
 }
 
 template <class TInputImage, class TLabelImage>
@@ -127,39 +128,6 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   InputImageSizeType kernelRadius;
   kernelRadius.Fill(1);
 
-  CNInputIterator inNIt(kernelRadius,
-                        this->GetInput(),
-                        this->GetOutput()->GetRequestedRegion() );
-
-  setConnectivity( &inNIt, m_FullyConnected );
-  ConstantBoundaryCondition<InputImageType> iBC;
-  iBC.SetConstant(NumericTraits<InputImagePixelType>::max());
-  inNIt.OverrideBoundaryCondition(&iBC);
-  // set up weights
-  WeightArrayType Weights;
-  SetupWeights(Weights, inNIt);
-  // A label neighborhood iterator (only for initialization)
-  typedef ConstShapedNeighborhoodIterator<LabelImageType> CNLabelIterator;
-  CNLabelIterator labNIt(kernelRadius,
-			 this->GetMarkerImage(),
-			 this->GetOutput()->GetRequestedRegion() );
-
-  setConnectivity( &labNIt, m_FullyConnected );
-  ConstantBoundaryCondition<LabelImageType> lBC;
-  // This might seem like a strange boundary condition, but we'll
-  // never be checking pixels with this label because they are already
-  // minimum cost
-  lBC.SetConstant(StartLabel);
-  labNIt.OverrideBoundaryCondition(&lBC);
-
-  typedef ConstShapedNeighborhoodIterator<CostImageType> CNCostIterator;
-  CNCostIterator costNIt(kernelRadius,
-			 CostImage,
-			 this->GetOutput()->GetRequestedRegion() );
-  setConnectivity( &costNIt, m_FullyConnected );
-  ConstantBoundaryCondition<CostImageType> cBC;
-  cBC.SetConstant(NumericTraits<CostPixType>::max());
-  costNIt.OverrideBoundaryCondition(&cBC);
 
   // create the queue
   PriorityQueueType PriorityQueue;
@@ -177,12 +145,11 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   costIt.GoToBegin();
   outIt.GoToBegin();
   inIt.GoToBegin();
-  inNIt.GoToBegin();
-  labNIt.GoToBegin();
-  costNIt.GoToBegin();
   // loop over the label image
   bool FoundStart = false;
   bool FoundEnd   = false;
+  IndexType StartIndex, EndIndex;
+
   while (!labIt.IsAtEnd())
     {
     // Find all pixels with value of the start label.
@@ -190,8 +157,13 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
     if (Val == StartLabel)
       {
       // point the other iterators to the correct spot
-      FoundStart = true;
       IndexType Ind = labIt.GetIndex();
+      if (!FoundStart)
+	{
+	FoundStart = true;
+	// record the start index to compute the sign of desired direction
+	StartIndex = Ind;
+	}
       inIt.SetIndex(Ind);
       // mark the output label image
       outIt.SetIndex(Ind);
@@ -208,9 +180,13 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
     else if (Val == EndLabel)
       {
       IndexType Ind = labIt.GetIndex();
+      if (!FoundEnd)
+	{
+	FoundEnd = true;
+	EndIndex = Ind;
+	}
       outIt.SetIndex(Ind);
       outIt.Set(MarkLabel);
-      FoundEnd = true;
       }
     ++labIt;
     }
@@ -225,6 +201,68 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
     {
     itkExceptionMacro( << "Failed to find end label");
     }
+
+  CNInputIterator inNIt(kernelRadius,
+                        this->GetInput(),
+                        this->GetOutput()->GetRequestedRegion() );
+
+
+  // A label neighborhood iterator (only for initialization)
+  typedef ConstShapedNeighborhoodIterator<LabelImageType> CNLabelIterator;
+  CNLabelIterator labNIt(kernelRadius,
+			 this->GetMarkerImage(),
+			 this->GetOutput()->GetRequestedRegion() );
+
+
+  typedef ConstShapedNeighborhoodIterator<CostImageType> CNCostIterator;
+  CNCostIterator costNIt(kernelRadius,
+			 CostImage,
+			 this->GetOutput()->GetRequestedRegion() );
+
+  // figure out the direction information if necessary
+  bool positive = true;
+
+  if (m_Direction >= 0)
+    {
+    if (m_Direction >= TInputImage::ImageDimension)
+      {
+      itkExceptionMacro(<< "Illegal direction");
+      }
+    // The possible directions have been constrained
+    positive = (EndIndex[m_Direction] - StartIndex[m_Direction]) > 0;
+    setConnectivityDirection( &inNIt, m_Direction, positive);
+    setConnectivityDirection( &labNIt, m_Direction, positive);
+    setConnectivityDirection( &costNIt, m_Direction, positive);
+    }
+  else
+    {
+    setConnectivity( &inNIt, m_FullyConnected );
+    setConnectivity( &labNIt, m_FullyConnected );
+    setConnectivity( &costNIt, m_FullyConnected );
+    }
+
+  ConstantBoundaryCondition<InputImageType> iBC;
+  iBC.SetConstant(NumericTraits<InputImagePixelType>::max());
+  inNIt.OverrideBoundaryCondition(&iBC);
+
+  ConstantBoundaryCondition<LabelImageType> lBC;
+  // This might seem like a strange boundary condition, but we'll
+  // never be checking pixels with this label because they are already
+  // minimum cost
+  lBC.SetConstant(StartLabel);
+  labNIt.OverrideBoundaryCondition(&lBC);
+
+  ConstantBoundaryCondition<CostImageType> cBC;
+  cBC.SetConstant(NumericTraits<CostPixType>::max());
+  costNIt.OverrideBoundaryCondition(&cBC);
+
+  // set up weights
+  WeightArrayType Weights;
+  SetupWeights(Weights, inNIt);
+
+  inNIt.GoToBegin();
+  labNIt.GoToBegin();
+  costNIt.GoToBegin();
 
   PixPriorityType TopPix;
   for (;;)
@@ -286,6 +324,14 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
     }
 
   // backtrack
+  if (m_Direction != -1)
+    {
+    // The possible directions have been constrained
+    setConnectivityDirection( &inNIt, m_Direction, !positive);
+    setConnectivityDirection( &labNIt, m_Direction, !positive);
+    setConnectivityDirection( &costNIt, m_Direction, !positive);
+    }
+
   IndexType CentIndex = TopPix.location;
   costNIt += CentIndex - costNIt.GetIndex();
   outIt.SetIndex(CentIndex);

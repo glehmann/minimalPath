@@ -55,10 +55,10 @@ int main(int argc, char * argv[])
   
   for (int i = 0;i<repeats;i++) 
     {
+    path->Modified();
     ltime.Start();
     path->Update();
     ltime.Stop();
-    path->Modified();
     }
 
   std::cout << std::setprecision(3) << "Path time : " 
