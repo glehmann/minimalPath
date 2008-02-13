@@ -103,11 +103,22 @@ public:
   /**
    * Set/Get whether the path is defined strictly by
    * face connectivity or by face+edge+vertex connectivity.  Default is
-   * FullyConnectedOn.
+   * FullyConnectedOn. This only make sense if the direction isn't
+   * constrained, and isn't particularly useful even then
    */
   itkSetMacro(FullyConnected, bool);
   itkGetConstReferenceMacro(FullyConnected, bool);
   itkBooleanMacro(FullyConnected);
+
+  /**
+   * Default = true. Should costs be weighted according to the spacing information -
+   * if yes then it will cost more to cross a diagonal, and the costs
+   * in different directions will be different if the voxels aren't
+   * cubic
+  */
+  itkSetMacro(UseDistWeights, bool);
+  itkGetConstReferenceMacro(UseDistWeights, bool);
+  itkBooleanMacro(UseDistWeights);
 
   itkSetMacro(StartLabel, LabelImagePixelType);
   itkGetConstReferenceMacro(StartLabel, LabelImagePixelType);
@@ -179,7 +190,7 @@ private:
   MinimalPathImageFilter(const Self&); //purposely not implemented
   void operator=(const Self&); //purposely not implemented
 
-  bool m_FullyConnected;
+  bool m_FullyConnected, m_UseDistWeights;
   LabelImagePixelType m_StartLabel, m_EndLabel, m_MarkLabel;
   LabelVectorType m_LabelChain;
   CostVectorType m_CostVector;

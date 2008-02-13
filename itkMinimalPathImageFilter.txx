@@ -17,6 +17,7 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 {
   this->SetNumberOfRequiredInputs(2);
   m_FullyConnected = true;
+  m_UseDistWeights = true;
   m_UnitCost = 1.0;
   m_StartLabel = 1;
   m_EndLabel = 2;
@@ -68,9 +69,10 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   typename CostImageType::Pointer CostImage = CostImageType::New();
   typename CostImageType::RegionType reg;
 
-  reg.SetSize(this->GetInput()->GetLargestPossibleRegion().GetSize());
-  reg.SetIndex(this->GetInput()->GetLargestPossibleRegion().GetIndex());
-  CostImage->SetRegions(reg);
+  //reg.SetSize(this->GetInput()->GetLargestPossibleRegion().GetSize());
+  //reg.SetIndex(this->GetInput()->GetLargestPossibleRegion().GetIndex());
+  //CostImage->SetRegions(reg);
+  CostImage->SetRegions(this->GetInput()->GetLargestPossibleRegion());
   CostImage->Allocate();
   this->AllocateOutputs();
 
@@ -101,8 +103,11 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   m_CostVector.assign(0, 0.0);
   for (int i=0;i<m_LabelChain.size()-1;i++)
     {
-    ComputeLink(m_LabelChain[i], m_LabelChain[i+1], 
-		m_MarkLabel, CostImage, progress);
+    if ((m_LabelChain[i] != 0) && (m_LabelChain[i+1] != 0))
+      {
+      ComputeLink(m_LabelChain[i], m_LabelChain[i+1], 
+		  m_MarkLabel, CostImage, progress);
+      }
     }
 }
 
@@ -194,12 +199,12 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   if (!FoundStart)
     {
     // exception - failed to find start label
-    itkExceptionMacro(<< "Failed to find start label");
+    itkExceptionMacro(<< "Failed to find start label " << (int)StartLabel);
     }
 
   if (!FoundEnd)
     {
-    itkExceptionMacro( << "Failed to find end label");
+    itkExceptionMacro( << "Failed to find end label " << (int)EndLabel);
     }
 
   CNInputIterator inNIt(kernelRadius,
@@ -269,6 +274,10 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
     {
     progress.CompletedPixel();
     // pop the head of the priority queue
+    if (PriorityQueue.empty())
+      {
+      itkExceptionMacro(<< "Priority queue empty " << (int)StartLabel << " " << (int)EndLabel);
+      }
     TopPix = PriorityQueue.top();
     PriorityQueue.pop();
     // set the iterators
@@ -376,18 +385,27 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 {
   typename CNInputIterator::ConstIterator sIt;
   InputImageSpacingType spacing = this->GetInput()->GetSpacing();
+  WeightArrayType Tweights;
   for (sIt = CNIt.Begin(); !sIt.IsAtEnd(); ++sIt)
     {
     InputImageOffsetType Off = sIt.GetNeighborhoodOffset();
     CostPixType dist = 0;
-    for (int i = 0; i < ImageDimension; i++)
+    if (m_UseDistWeights)
       {
-      dist += (Off[i] * spacing[i]) * (Off[i] * spacing[i]);
+      for (int i = 0; i < ImageDimension; i++)
+	{
+	dist += (Off[i] * spacing[i]) * (Off[i] * spacing[i]);
+	}
+      dist = sqrt(dist);
       }
-    dist = sqrt(dist);
-    weights.push_back(dist);
+    else
+      {
+      dist = 1.0;
+      }
+    Tweights.push_back(dist);
 //    std::cout << dist << " " << std::endl;
     }
+  weights = Tweights;
 }
 
 

@@ -19,12 +19,15 @@ FIND_PROGRAM(IMAGE_COMPARE ImageCompare)
 SET(Required_Packages
   ITK
 )
-
+INCLUDE_DIRECTORIES(
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
 #this foreach loads all of the packages that you specified as required.
 #It shouldn't need to be modified.
 FOREACH(Package ${Required_Packages})
   LOADPACKAGE(${Package})
 ENDFOREACH(Package)
+
 
 #Set any libraries that your project depends on.
 #examples: ITKCommon, VTKRendering, etc
@@ -32,6 +35,7 @@ SET(Libraries
   ITKCommon
   ITKBasicFilters
   ITKIO
+  ITKStatistics
 )
 
 
@@ -62,13 +66,10 @@ ENDIF(BUILD_WRAPPERS)
 
 IF(BUILD_TESTING)
 
-SET(CurrentExe "testPath")
+FOREACH(CurrentExe "testPath" "testPath3d" "segArtery" "segArtery2")
 ADD_EXECUTABLE(${CurrentExe} ${CurrentExe}.cxx)
 TARGET_LINK_LIBRARIES(${CurrentExe} ${Libraries})
-
-SET(CurrentExe "testPath3d")
-ADD_EXECUTABLE(${CurrentExe} ${CurrentExe}.cxx)
-TARGET_LINK_LIBRARIES(${CurrentExe} ${Libraries})
+ENDFOREACH (CurrentExe)
 
 ENDIF(BUILD_TESTING)
 
