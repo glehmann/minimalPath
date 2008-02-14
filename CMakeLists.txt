@@ -19,8 +19,12 @@ FIND_PROGRAM(IMAGE_COMPARE ImageCompare)
 SET(Required_Packages
   ITK
 )
+SET (HOME /home/richardb/)
+
 INCLUDE_DIRECTORIES(
   ${CMAKE_CURRENT_SOURCE_DIR}
+  ${HOME}/Projects/ITK/consolidatedMorphology/	  
+  ${HOME}/Projects/ITK/watershed/	
 )
 #this foreach loads all of the packages that you specified as required.
 #It shouldn't need to be modified.
