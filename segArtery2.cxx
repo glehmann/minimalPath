@@ -13,6 +13,10 @@
 #include <itkBinaryThresholdImageFilter.h>
 #include <itkMaximumImageFilter.h>
 
+#include <itkResampleImageFilter.h>
+#include <itkIdentityTransform.h>
+#include <itkLinearInterpolateImageFunction.h>
+#include <itkNearestNeighborInterpolateImageFunction.h>
 
 #include "itkExtractImageFilter.h"
 
@@ -230,6 +234,66 @@ typename TImage::Pointer createMarker(typename TImage::Pointer path, float radiu
   return(result);
 }
 /////////////////////////////////////////////////////
+template  <class RawIm>
+typename RawIm::Pointer upsampleIm(typename RawIm::Pointer input, typename RawIm::SpacingType NewSpacing, int interp=0)
+{
+  const int dim = RawIm::ImageDimension;
+  typedef typename RawIm::PixelType PixelType;
+
+  typedef typename itk::ResampleImageFilter<RawIm, RawIm >  ResampleFilterType;
+  typedef typename itk::IdentityTransform< double, dim >  TransformType;
+  typename ResampleFilterType::Pointer resampler = ResampleFilterType::New();
+
+  input->Update();
+
+  typename TransformType::Pointer transform = TransformType::New();
+  transform->SetIdentity();
+  resampler->SetTransform( transform );
+  typedef typename itk::LinearInterpolateImageFunction<RawIm, double >  LInterpolatorType;
+  typedef typename itk::NearestNeighborInterpolateImageFunction<RawIm, double >  NNInterpolatorType;
+
+  typename ResampleFilterType::InterpolatorPointerType interpolator;
+  switch (interp)
+    {
+    case 0:
+      interpolator = NNInterpolatorType::New();
+      break;
+    case 1:
+      interpolator = LInterpolatorType::New();
+      break;
+    default:
+      std::cout << "Unsupported interpolator" << std::endl;
+    }
+
+  resampler->SetInterpolator( interpolator );
+  resampler->SetDefaultPixelValue( 0 );
+
+  const typename RawIm::SpacingType& inputSpacing = input->GetSpacing();
+  typename RawIm::SpacingType spacing;
+  typename RawIm::SizeType   inputSize = input->GetLargestPossibleRegion().GetSize();
+  typename RawIm::SizeType   size;
+  typedef typename RawIm::SizeType::SizeValueType SizeValueType;
+
+
+  for (unsigned i = 0; i < dim; i++)
+    {
+    //spacing[i] = inputSpacing[i]/factor;
+    float factor = inputSpacing[i]/NewSpacing[i];
+    size[i] = static_cast< SizeValueType >( inputSize[i] * factor );
+    }
+  std::cout << inputSpacing << NewSpacing << std::endl;
+  std::cout << inputSize << size << input->GetOrigin() << std::endl;
+  
+  resampler->SetSize( size );
+  resampler->SetOutputSpacing( NewSpacing );
+  resampler->SetOutputOrigin( input->GetOrigin() );
+  resampler->SetInput(input);
+  typename RawIm::Pointer result = resampler->GetOutput();
+  result->Update();
+  result->DisconnectPipeline();
+  return(result);
+}
+////////////////////////////////////////////////////////////////////
 
 template <class PixType, int dim>
 void segArtery(const CmdLineType &CmdLineObj)
@@ -239,6 +303,7 @@ void segArtery(const CmdLineType &CmdLineObj)
 
   typename RawImType::Pointer rawIm = readImOrient<RawImType>(CmdLineObj.InputIm);
   typename MaskImType::Pointer pointIm = readImOrient<MaskImType>(CmdLineObj.MarkerIm);
+
 
   // compute a cost image - carotid should be dark
   typename RawImType::Pointer costIm = computeCostIm<RawImType, MaskImType>(rawIm, pointIm, CmdLineObj.Labels);
@@ -256,7 +321,10 @@ void segArtery(const CmdLineType &CmdLineObj)
   path->SetMarkerImage(pointIm);
   path->SetLabelChain(LVec);
   path->SetUseDistWeights(false);
-  path->Update();
+  typename MaskImType::Pointer completePath = path->GetOutput();
+  completePath->Update();
+  completePath->DisconnectPipeline();
+
   const typename MinPathType::CostVectorType CV = path->GetCosts();
   typename MinPathType::CostVectorType::const_iterator CVIt;
   for (CVIt = CV.begin();CVIt!=CV.end();CVIt++)
@@ -264,9 +332,26 @@ void segArtery(const CmdLineType &CmdLineObj)
     std::cout << std::setprecision(3) << "Path cost : " << *CVIt << std::endl;
     }
 
+  // resample the input images and marker to improve the spacing along
+  // the sparse axis - should be able to do this directly on the
+  // cropped images and thereby improve performance. Something went
+  // wrong and the image ends up blank
+  typename RawImType::SpacingType sp = rawIm->GetSpacing();
+  if (sp[2] > 0.75) 
+    {
+    sp[2] = 0.75;
+    typename RawImType::Pointer reRaw = upsampleIm<RawImType>(costIm, sp, 1);
+    typename RawImType::Pointer reRaw2 = upsampleIm<RawImType>(rawIm, sp, 1);
+    typename MaskImType::Pointer reMark = upsampleIm<MaskImType>(completePath, sp, 0);
+    writeIm<RawImType>(reRaw, "/tmp/h.nii.gz");
+    costIm = reRaw;
+    completePath = reMark;
+    rawIm = reRaw2;
+    }
+
   // clip out a box containing the marker we just created
-  itk::ImageRegion<dim> BBox = getBB<MaskImType>(path->GetOutput(), LVec[0], 30.0);
-  typename MaskImType::Pointer cPath = doCrop<MaskImType>(path->GetOutput(), BBox);
+  itk::ImageRegion<dim> BBox = getBB<MaskImType>(completePath, LVec[0], 30.0);
+  typename MaskImType::Pointer cPath = doCrop<MaskImType>(completePath, BBox);
   // doesn't really matter whether the original or cost image is used here
   typename RawImType::Pointer cRaw = doCrop<RawImType>(costIm, BBox);
   
