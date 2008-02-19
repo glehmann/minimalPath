@@ -2,8 +2,6 @@
 
 #include "tclap/CmdLine.h"
 #include <iomanip>
-// #include "itkImageFileReader.h"
-// #include "itkImageFileWriter.h"
 
 #include "itkMinimalPathImageFilter.h"
 #include <itkLabelStatisticsImageFilter.h>
@@ -134,7 +132,7 @@ typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
   // put the labels in a set so that they don't get counted twice
   typedef std::set<int> IntSet;
   IntSet UniqueLabs;
-  for (unsigned int i = 0;i<labels.size();i++)
+  for (int i = 0;i<labels.size();i++)
     {
     if (labels[i] != 0)
       {
@@ -283,7 +281,7 @@ typename RawIm::Pointer upsampleIm(typename RawIm::Pointer input, typename RawIm
   typedef typename RawIm::SizeType::SizeValueType SizeValueType;
 
 
-  for (int i = 0; i < dim; i++)
+  for (unsigned i = 0; i < dim; i++)
     {
     //spacing[i] = inputSpacing[i]/factor;
     float factor = inputSpacing[i]/NewSpacing[i];
