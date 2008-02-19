@@ -92,6 +92,7 @@ void ParseCmdLine(int argc, char* argv[],
 
     UnlabeledMultiArg<int> labvals(std::string("labels"),
  				   std::string("list of label values"),
+				   true,
  				   std::string("integers"));
     cmd.add(labvals);
 
@@ -343,7 +344,7 @@ void segArtery(const CmdLineType &CmdLineObj)
     typename RawImType::Pointer reRaw = upsampleIm<RawImType>(costIm, sp, 1);
     typename RawImType::Pointer reRaw2 = upsampleIm<RawImType>(rawIm, sp, 1);
     typename MaskImType::Pointer reMark = upsampleIm<MaskImType>(completePath, sp, 0);
-    writeIm<RawImType>(reRaw, "/tmp/h.nii.gz");
+    //writeIm<RawImType>(reRaw, "/tmp/h.nii.gz");
     costIm = reRaw;
     completePath = reMark;
     rawIm = reRaw2;
@@ -353,7 +354,8 @@ void segArtery(const CmdLineType &CmdLineObj)
   itk::ImageRegion<dim> BBox = getBB<MaskImType>(completePath, LVec[0], 30.0);
   typename MaskImType::Pointer cPath = doCrop<MaskImType>(completePath, BBox);
   // doesn't really matter whether the original or cost image is used here
-  typename RawImType::Pointer cRaw = doCrop<RawImType>(costIm, BBox);
+//  typename RawImType::Pointer cRaw = doCrop<RawImType>(costIm, BBox);
+  typename RawImType::Pointer cRaw = doCrop<RawImType>(rawIm, BBox);
   
   // now we need to turn the path image into a marker
   typename MaskImType::Pointer finalMarker = createMarker<MaskImType>(cPath, CmdLineObj.radius);
@@ -396,7 +398,7 @@ void segArtery(const CmdLineType &CmdLineObj)
   writeIm<RawImType>(doCrop<RawImType>(rawIm, BBox), CmdLineObj.SubIm);
   writeIm<MaskImType>(finalMarker, "/tmp/marker.nii.gz");
   writeIm<RawImType>(gradIm, "/tmp/grad.nii.gz");
-  writeIm<RawImType>(cRaw, "/tmp/cost.nii.gz");
+  //writeIm<RawImType>(cRaw, "/tmp/cost.nii.gz");
 }
 
 /////////////////////////////////////////////////////

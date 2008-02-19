@@ -19,7 +19,7 @@ FIND_PROGRAM(IMAGE_COMPARE ImageCompare)
 SET(Required_Packages
   ITK
 )
-SET (HOME /home/richardb/)
+SET (HOME $ENV{HOME})
 
 INCLUDE_DIRECTORIES(
   ${CMAKE_CURRENT_SOURCE_DIR}
