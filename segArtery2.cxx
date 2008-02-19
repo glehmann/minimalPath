@@ -305,10 +305,40 @@ void segArtery(const CmdLineType &CmdLineObj)
   typename RawImType::Pointer rawIm = readImOrient<RawImType>(CmdLineObj.InputIm);
   typename MaskImType::Pointer pointIm = readImOrient<MaskImType>(CmdLineObj.MarkerIm);
 
-
+  // dodgy use of scoping to make sure that intermediate images get deleted
+  typename RawImType::Pointer costIm, gradIm;
+  {
   // compute a cost image - carotid should be dark
-  typename RawImType::Pointer costIm = computeCostIm<RawImType, MaskImType>(rawIm, pointIm, CmdLineObj.Labels);
+  typename RawImType::Pointer basecostIm = computeCostIm<RawImType, MaskImType>(rawIm, pointIm, CmdLineObj.Labels);
+  // now compute a gradient of the raw image
+  if (CmdLineObj.morphGrad)
+    {
+    std::cout << "Morph gradient" << std::endl;
+    gradIm = doGradientOuterMM<RawImType>(rawIm, 0.5);
+    }
+  else
+    {
+    typedef typename itk::GradientMagnitudeRecursiveGaussianImageFilter<RawImType, RawImType> GradMagType;
+    typename GradMagType::Pointer gradfilt = GradMagType::New();
+    gradfilt->SetInput(rawIm);
+    gradfilt->SetSigma(0.5);
+    gradIm = gradfilt->GetOutput();
+    gradIm->Update();
+    gradIm->DisconnectPipeline();
+    }
 
+  // combine the gradient image and the cost image - use a max
+  // function for want of anything better. Might need to be careful
+  // about this if gradient changes
+  typedef typename itk::MaximumImageFilter<RawImType, RawImType, RawImType> MaxType;
+  typename MaxType::Pointer maxfilt = MaxType::New();
+  
+  maxfilt->SetInput(gradIm);
+  maxfilt->SetInput2(basecostIm);
+  typename RawImType::Pointer costIm = maxfilt->GetOutput();
+  costIm->Update();
+  costIm->DisconnectPipeline();
+  }
   typedef typename itk::MinimalPathImageFilter<RawImType, MaskImType> MinPathType;
   typename MinPathType::Pointer path = MinPathType::New();
 
@@ -354,16 +384,13 @@ void segArtery(const CmdLineType &CmdLineObj)
   itk::ImageRegion<dim> BBox = getBB<MaskImType>(completePath, LVec[0], 30.0);
   typename MaskImType::Pointer cPath = doCrop<MaskImType>(completePath, BBox);
   // doesn't really matter whether the original or cost image is used here
-//  typename RawImType::Pointer cRaw = doCrop<RawImType>(costIm, BBox);
+  typename RawImType::Pointer cCost = doCrop<RawImType>(costIm, BBox);
   typename RawImType::Pointer cRaw = doCrop<RawImType>(rawIm, BBox);
   
   // now we need to turn the path image into a marker
   typename MaskImType::Pointer finalMarker = createMarker<MaskImType>(cPath, CmdLineObj.radius);
-
-  // now compute a gradient of the cost image and apply the watershed
-  // transform
-  typename RawImType::Pointer gradIm;
-
+  // now compute a gradient of the raw image - recomputing instead of
+  // cropping in case we have resampled
   if (CmdLineObj.morphGrad)
     {
     std::cout << "Morph gradient" << std::endl;
@@ -379,6 +406,8 @@ void segArtery(const CmdLineType &CmdLineObj)
     gradIm->Update();
     gradIm->DisconnectPipeline();
     }
+
+  // now apply the watershed
 
   typedef typename itk::MorphologicalWatershedFromMarkersImageFilter<RawImType, MaskImType> WShedType;
   typename WShedType::Pointer wshed = WShedType::New();
@@ -398,7 +427,7 @@ void segArtery(const CmdLineType &CmdLineObj)
   writeIm<RawImType>(doCrop<RawImType>(rawIm, BBox), CmdLineObj.SubIm);
   writeIm<MaskImType>(finalMarker, "/tmp/marker.nii.gz");
   writeIm<RawImType>(gradIm, "/tmp/grad.nii.gz");
-  //writeIm<RawImType>(cRaw, "/tmp/cost.nii.gz");
+  writeIm<RawImType>(cCost, "/tmp/cost.nii.gz");
 }
 
 /////////////////////////////////////////////////////
