@@ -11,7 +11,10 @@
 #include <itkAbsImageFilter.h>
 #include <itkHistogram.h>
 #include <itkBinaryThresholdImageFilter.h>
+#include <itkThresholdImageFilter.h>
 #include <itkMaximumImageFilter.h>
+#include <itkAddImageFilter.h>
+#include <itkSquareImageFilter.h>
 
 #include <itkResampleImageFilter.h>
 #include <itkIdentityTransform.h>
@@ -145,8 +148,6 @@ typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
     }
   Mn /= UniqueLabs.size();
   
-  std::cout << Mn << std::endl;
-
   typedef typename itk::AbsDiffConstantImageFilter<RImage, RImage> AbsDiffType;
   typename AbsDiffType::Pointer AbsDiff = AbsDiffType::New();
   AbsDiff->SetInput(raw);
@@ -282,8 +283,8 @@ typename RawIm::Pointer upsampleIm(typename RawIm::Pointer input, typename RawIm
     float factor = inputSpacing[i]/NewSpacing[i];
     size[i] = static_cast< SizeValueType >( inputSize[i] * factor );
     }
-  std::cout << inputSpacing << NewSpacing << std::endl;
-  std::cout << inputSize << size << input->GetOrigin() << std::endl;
+//   std::cout << inputSpacing << NewSpacing << std::endl;
+//   std::cout << inputSize << size << input->GetOrigin() << std::endl;
   
   resampler->SetSize( size );
   resampler->SetOutputSpacing( NewSpacing );
@@ -330,17 +331,33 @@ void segArtery(const CmdLineType &CmdLineObj)
   // combine the gradient image and the cost image - use a max
   // function for want of anything better. Might need to be careful
   // about this if gradient changes
-  typedef typename itk::MaximumImageFilter<RawImType, RawImType, RawImType> MaxType;
-  typename MaxType::Pointer maxfilt = MaxType::New();
+
+  typedef typename itk::SquareImageFilter<RawImType, RawImType> SquareType;
+  typename SquareType::Pointer sqrfilt = SquareType::New();
+  sqrfilt->SetInput(gradIm);
   
-  maxfilt->SetInput(gradIm);
-  maxfilt->SetInput2(basecostIm);
-  typename RawImType::Pointer costIm = maxfilt->GetOutput();
+  // set low gradients to zero
+  typedef typename itk::ThresholdImageFilter<RawImType> ThreshType;
+  typename ThreshType::Pointer thresh = ThreshType::New();
+
+  thresh->SetInput(sqrfilt->GetOutput());
+  thresh->SetLower(5); // WARNING - magic number
+  thresh->SetUpper(1000);
+  thresh->SetOutsideValue((typename RawImType::PixelType)0.0);
+
+  typedef typename itk::AddImageFilter<RawImType, RawImType, RawImType> AddType;
+  typename AddType::Pointer addfilt = AddType::New();
+  
+  addfilt->SetInput(thresh->GetOutput());
+  addfilt->SetInput2(basecostIm);
+  costIm = addfilt->GetOutput();
   costIm->Update();
   costIm->DisconnectPipeline();
   }
+  writeIm<RawImType>(costIm, "/tmp/cst.nii.gz");
   typedef typename itk::MinimalPathImageFilter<RawImType, MaskImType> MinPathType;
   typename MinPathType::Pointer path = MinPathType::New();
+
 
   // convert the labels to the correct type
   std::vector<typename MaskImType::PixelType> LVec;
