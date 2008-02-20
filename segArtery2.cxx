@@ -466,11 +466,7 @@ int main(int argc, char * argv[])
   const std::type_info &pixelDataType =
     reader->GetImageIO()->GetComponentTypeInfo();
 
-  if ( pixelDataType == typeid(unsigned char))
-    {
-    segArtery<unsigned char, dim>(CmdLineObj);
-    }
-  else if (pixelDataType == typeid( float ))
+  if (pixelDataType == typeid( float ))
     {
     segArtery<float, dim>(CmdLineObj);
     }
