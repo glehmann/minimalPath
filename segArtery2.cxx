@@ -44,22 +44,12 @@
 #include "itkAbsDiffConstantImageFilter.h"
 #include "morphutils.h"
 
-template <class pixtype>
-class MaxFunctor
-{
-public:
-  MaxFunctor(){}
-  ~MaxFunctor(){}
-  inline pixtype operator()(const pixtype &A, const pixtype &B)
-  {
-    return std::max(A, B);
-  }
-};
 
 typedef class CmdLineType
 {
 public:
   std::string InputIm, MarkerIm, OutputIm, SubIm;
+  std::string targetDir;
   std::vector<int> Labels;
   float radius;
   bool morphGrad;
@@ -86,6 +76,9 @@ void ParseCmdLine(int argc, char* argv[],
 
     ValueArg<std::string> outArg("o","output","output image", true,"result","string");
     cmd.add( outArg );
+
+    ValueArg<std::string> debugArg("d","debugdir","output image directory", false,"/tmp/","string");
+    cmd.add( outArg );
     
     ValueArg<bool> gradArg("l","linear","linear gradient", false, false,"boolean");
     cmd.add( gradArg );
@@ -105,6 +98,7 @@ void ParseCmdLine(int argc, char* argv[],
     CmdLineObj.InputIm = inArg.getValue();
     CmdLineObj.OutputIm = outArg.getValue();
     CmdLineObj.MarkerIm = markArg.getValue();
+    CmdLineObj.targetDir = debugArg.getValue() + "/";
     CmdLineObj.SubIm = subArg.getValue();
     CmdLineObj.Labels = labvals.getValue();
     CmdLineObj.radius = radArg.getValue();
@@ -354,7 +348,6 @@ void segArtery(const CmdLineType &CmdLineObj)
   costIm->Update();
   costIm->DisconnectPipeline();
   }
-  writeIm<RawImType>(costIm, "/tmp/cst.nii.gz");
   typedef typename itk::MinimalPathImageFilter<RawImType, MaskImType> MinPathType;
   typename MinPathType::Pointer path = MinPathType::New();
 
@@ -385,6 +378,7 @@ void segArtery(const CmdLineType &CmdLineObj)
   // cropped images and thereby improve performance. Something went
   // wrong and the image ends up blank
   typename RawImType::SpacingType sp = rawIm->GetSpacing();
+  bool upsampled = false;
   if (sp[2] > 0.75) 
     {
     sp[2] = 0.75;
@@ -395,6 +389,7 @@ void segArtery(const CmdLineType &CmdLineObj)
     costIm = reRaw;
     completePath = reMark;
     rawIm = reRaw2;
+    upsampled=true;
     }
 
   // clip out a box containing the marker we just created
@@ -425,7 +420,6 @@ void segArtery(const CmdLineType &CmdLineObj)
     }
 
   // now apply the watershed
-
   typedef typename itk::MorphologicalWatershedFromMarkersImageFilter<RawImType, MaskImType> WShedType;
   typename WShedType::Pointer wshed = WShedType::New();
   wshed->SetInput(gradIm);
@@ -442,9 +436,22 @@ void segArtery(const CmdLineType &CmdLineObj)
   selector->SetOutsideValue(0);
   writeIm<MaskImType>(selector->GetOutput(), CmdLineObj.OutputIm);
   writeIm<RawImType>(doCrop<RawImType>(rawIm, BBox), CmdLineObj.SubIm);
-  writeIm<MaskImType>(finalMarker, "/tmp/marker.nii.gz");
-  writeIm<RawImType>(gradIm, "/tmp/grad.nii.gz");
-  writeIm<RawImType>(cCost, "/tmp/cost.nii.gz");
+  writeIm<MaskImType>(finalMarker, CmdLineObj.targetDir + "marker.nii.gz");
+  writeIm<RawImType>(gradIm, CmdLineObj.targetDir + "grad.nii.gz");
+  writeIm<RawImType>(cCost, CmdLineObj.targetDir + "cost.nii.gz");
+
+  // upsample and crop the point image so that it can be used to
+  // identify the arteries
+  if (upsampled)
+    {
+    typename MaskImType::Pointer rePoint = upsampleIm<MaskImType>(pointIm, sp, 0);
+    writeIm<MaskImType>(doCrop<MaskImType>(rePoint, BBox), CmdLineObj.targetDir + "points.nii.gz");
+    }
+  else
+    {
+    writeIm<MaskImType>(doCrop<MaskImType>(pointIm, BBox), CmdLineObj.targetDir + "points.nii.gz");
+    }
+  
 }
 
 /////////////////////////////////////////////////////

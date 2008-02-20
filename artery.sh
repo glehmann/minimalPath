@@ -46,7 +46,7 @@ echo "------------------------------------"
 echo "Finished converting"
 
 #$LABPROG $MARK $LAB 0 3 4 1 1
-$SEGPROG -i $CONTROL -m $MARK -r 10 -l 1 -o $SEGOUT -s $CONTOUT 1 2 3 4 0 2 5 6
+$SEGPROG -d $TMP -i $CONTROL -m $MARK -r 10 -l 1 -o $SEGOUT -s $CONTOUT 1 2 3 4 0 2 5 6
 
 #if [ -e $CONTOUT ]; then 
 #    echo "Done segmenting"
@@ -66,6 +66,7 @@ OUTPREF=$3
 
 mv $SEGOUT $OUTPREF"_seg.nii.gz"
 mv $CONTOUT $OUTPREF"_raw.nii.gz"
-mv /tmp/marker.nii.gz $OUTPREF"_mark.nii.gz"
-mv /tmp/grad.nii.gz $OUTPREF"_grad.nii.gz"
-mv /tmp/cost.nii.gz $OUTPREF"_cost.nii.gz"
+mv $TMP/marker.nii.gz $OUTPREF"_mark.nii.gz"
+mv $TMP/grad.nii.gz $OUTPREF"_grad.nii.gz"
+mv $TMP/cost.nii.gz $OUTPREF"_cost.nii.gz"
+mv $TMP/points.nii.gz $OUTPREF"_points.nii.gz"
