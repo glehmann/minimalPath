@@ -20,6 +20,7 @@
 #include <itkIdentityTransform.h>
 #include <itkLinearInterpolateImageFunction.h>
 #include <itkNearestNeighborInterpolateImageFunction.h>
+#include <itkMaskNegatedImageFilter.h>
 
 #include "itkExtractImageFilter.h"
 
@@ -48,7 +49,7 @@
 typedef class CmdLineType
 {
 public:
-  std::string InputIm, MarkerIm, OutputIm, SubIm;
+  std::string InputIm, MarkerIm, JugularIm, OutputIm, SubIm;
   std::string targetDir;
   std::vector<int> Labels;
   float radius;
@@ -68,6 +69,9 @@ void ParseCmdLine(int argc, char* argv[],
     ValueArg<std::string> inArg("i","input","input image",true,"result","string");
     cmd.add( inArg );
 
+    ValueArg<std::string> jugArg("j","jugular","jugular image",true,"result","string");
+    cmd.add( jugArg );
+
     ValueArg<std::string> markArg("m","marker","marker image",true,"result","string");
     cmd.add( markArg );
 
@@ -78,7 +82,7 @@ void ParseCmdLine(int argc, char* argv[],
     cmd.add( outArg );
 
     ValueArg<std::string> debugArg("d","debugdir","output image directory", false,"/tmp/","string");
-    cmd.add( outArg );
+    cmd.add( debugArg );
     
     ValueArg<bool> gradArg("l","linear","linear gradient", false, false,"boolean");
     cmd.add( gradArg );
@@ -97,6 +101,7 @@ void ParseCmdLine(int argc, char* argv[],
 
     CmdLineObj.InputIm = inArg.getValue();
     CmdLineObj.OutputIm = outArg.getValue();
+    CmdLineObj.JugularIm = jugArg.getValue();
     CmdLineObj.MarkerIm = markArg.getValue();
     CmdLineObj.targetDir = debugArg.getValue() + "/";
     CmdLineObj.SubIm = subArg.getValue();
@@ -290,7 +295,52 @@ typename RawIm::Pointer upsampleIm(typename RawIm::Pointer input, typename RawIm
   return(result);
 }
 ////////////////////////////////////////////////////////////////////
+template <class RImage, class LImage>
+typename RImage::Pointer maskJugular(typename RImage::Pointer rawIm,
+				     typename LImage::Pointer labelIm)
+{
+  // use a watershed to segment jugular from everything else
+  typename RImage::Pointer gradIm;
+  {
+  // compute gradient
+  typedef typename itk::GradientMagnitudeRecursiveGaussianImageFilter<RImage, RImage> GradMagType;
+  typename GradMagType::Pointer gradfilt = GradMagType::New();
+  gradfilt->SetInput(rawIm);
+  gradfilt->SetSigma(0.5);
+  gradIm = gradfilt->GetOutput();
+  gradIm->Update();
+  gradIm->DisconnectPipeline();
+  }
 
+  typedef typename itk::MorphologicalWatershedFromMarkersImageFilter<RImage, LImage> WShedType;
+  typename WShedType::Pointer wshed = WShedType::New();
+  wshed->SetInput(gradIm);
+  wshed->SetMarkerImage(labelIm);
+  wshed->SetFullyConnected(false);
+  wshed->SetMarkWatershedLine(false);
+  // select the vessel and delete the background marker
+  typedef typename itk::BinaryThresholdImageFilter<LImage,LImage> ThreshType;
+  typename ThreshType::Pointer selector = ThreshType::New();
+  selector->SetInput(wshed->GetOutput());
+  selector->SetLowerThreshold(1);
+  selector->SetUpperThreshold(1);
+  selector->SetInsideValue(1);
+  selector->SetOutsideValue(0);
+
+  writeIm<LImage>(selector->GetOutput(), "/tmp/mask.nii.gz");
+  writeIm<RImage>(rawIm, "/tmp/raw.nii.gz");
+
+  typedef typename itk::MaskNegatedImageFilter<RImage, LImage, RImage> MaskerType;
+  typename MaskerType::Pointer masker = MaskerType::New();
+  masker->SetInput(rawIm);
+  masker->SetInput2(selector->GetOutput());
+  typename RImage::Pointer result = masker->GetOutput();
+  result->Update();
+  result->DisconnectPipeline();
+  return(result);
+}
+
+////////////////////////////////////////////////////////////////////
 template <class PixType, int dim>
 void segArtery(const CmdLineType &CmdLineObj)
 {
@@ -298,6 +348,15 @@ void segArtery(const CmdLineType &CmdLineObj)
   typedef typename itk::Image<unsigned char, dim> MaskImType;
 
   typename RawImType::Pointer rawIm = readImOrient<RawImType>(CmdLineObj.InputIm);
+  // preprocess the rawIm to remove the jugular
+  {
+  typename MaskImType::Pointer jugMarkerIm = readImOrient<MaskImType>(CmdLineObj.JugularIm);
+  
+  typename RawImType::Pointer noJugular = maskJugular<RawImType, MaskImType>(rawIm, jugMarkerIm);
+
+  writeIm<RawImType>(noJugular, "/tmp/nojug.nii.gz");
+  }
+  return;
   typename MaskImType::Pointer pointIm = readImOrient<MaskImType>(CmdLineObj.MarkerIm);
 
   // dodgy use of scoping to make sure that intermediate images get deleted

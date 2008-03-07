@@ -17,8 +17,11 @@ RM=/bin/rm
 #CONV=/usr/local/minc2/bin/mnc2nii
 CONV=mnc2nii
 RESMARK=$TMP/marker.mnc
+RESJUGMARK=$TMP/jugmarker.mnc
 LAB=$TMP/lab.nii
 MARK=$TMP/mark.nii
+JUGMARK=$TMP/jugmark.nii
+
 CONTROL=$TMP/control.nii
 
 SEGOUT=$TMP/result.nii.gz
@@ -29,7 +32,9 @@ CONTOUT=$TMP/sub_control.nii.gz
 if [ -e $2 ]; then
    # resample the marker to be like the input
    mincresample -nearest_neighbour -keep_real_range -like $1 $2 $RESMARK
+   mincresample -nearest_neighbour -keep_real_range -like $1 $3 $RESJUGMARK
    $CONV -byte $RESMARK $MARK
+   $CONV -byte $RESJUGMARK $JUGMARK
 else
   echo "No such file $2"
   exit
@@ -46,7 +51,16 @@ echo "------------------------------------"
 echo "Finished converting"
 
 #$LABPROG $MARK $LAB 0 3 4 1 1
-$SEGPROG -d $TMP -i $CONTROL -m $MARK -r 10 -l 1 -o $SEGOUT -s $CONTOUT 1 2 3 4 0 2 5 6
+$SEGPROG -d $TMP -i $CONTROL -m $MARK -j $JUGMARK -r 10 -l 1 -o $SEGOUT -s $CONTOUT 1 2 3 4 0 2 5 6
+
+dd=$(dirname $1)
+bb=$(basename $dd)
+
+BNAME=/tmp/${bb}.nii.gz
+MNAME=/tmp/${bb}_jug.nii.gz
+
+mv /tmp/raw.nii.gz $BNAME
+mv /tmp/mask.nii.gz $MNAME
 
 #if [ -e $CONTOUT ]; then 
 #    echo "Done segmenting"
@@ -64,9 +78,10 @@ OUTPREF=$3
 
 #$STLPROG $SEGOUT 1 $OUTPREF".stl"
 
-mv $SEGOUT $OUTPREF"_seg.nii.gz"
-mv $CONTOUT $OUTPREF"_raw.nii.gz"
-mv $TMP/marker.nii.gz $OUTPREF"_mark.nii.gz"
-mv $TMP/grad.nii.gz $OUTPREF"_grad.nii.gz"
-mv $TMP/cost.nii.gz $OUTPREF"_cost.nii.gz"
-mv $TMP/points.nii.gz $OUTPREF"_points.nii.gz"
+
+#mv $SEGOUT $OUTPREF"_seg.nii.gz"
+#mv $CONTOUT $OUTPREF"_raw.nii.gz"
+#mv $TMP/marker.nii.gz $OUTPREF"_mark.nii.gz"
+#mv $TMP/grad.nii.gz $OUTPREF"_grad.nii.gz"
+#mv $TMP/cost.nii.gz $OUTPREF"_cost.nii.gz"
+#mv $TMP/points.nii.gz $OUTPREF"_points.nii.gz"
