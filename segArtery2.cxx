@@ -69,7 +69,7 @@ void ParseCmdLine(int argc, char* argv[],
     ValueArg<std::string> inArg("i","input","input image",true,"result","string");
     cmd.add( inArg );
 
-    ValueArg<std::string> jugArg("j","jugular","jugular image",true,"result","string");
+    ValueArg<std::string> jugArg("j","jugular","jugular mask",true,"result","string");
     cmd.add( jugArg );
 
     ValueArg<std::string> markArg("m","marker","marker image",true,"result","string");
@@ -120,7 +120,8 @@ void ParseCmdLine(int argc, char* argv[],
 template <class RImage, class LImage>
 typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
 				       typename LImage::Pointer marker,
-				       const std::vector<int> &labels)
+				       const std::vector<int> &labels, 
+				       typename RImage::PixelType CalciteThresh=500)
 {
   typedef itk::LabelStatisticsImageFilter<RImage, LImage> LabStatsType;
   typename LabStatsType::Pointer labstats = LabStatsType::New();
@@ -133,7 +134,7 @@ typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
   // put the labels in a set so that they don't get counted twice
   typedef std::set<int> IntSet;
   IntSet UniqueLabs;
-  for (int i = 0;i<labels.size();i++)
+  for (unsigned int i = 0;i<labels.size();i++)
     {
     if (labels[i] != 0)
       {
@@ -147,9 +148,15 @@ typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
     }
   Mn /= UniqueLabs.size();
   
+  // use a threshold to deal with calcite in the artery before
+  // creating the cost image
+  typedef typename itk::ThresholdImageFilter<RImage> ThreshType;
+  typename ThreshType::Pointer thresh = ThreshType::New();
+  thresh->ThresholdAbove(Mn + CalciteThresh);
+
   typedef typename itk::AbsDiffConstantImageFilter<RImage, RImage> AbsDiffType;
   typename AbsDiffType::Pointer AbsDiff = AbsDiffType::New();
-  AbsDiff->SetInput(raw);
+  AbsDiff->SetInput(thresh->GetOutput());
   AbsDiff->SetVal(Mn);
   typename RImage::Pointer result = AbsDiff->GetOutput();
   result->Update();
@@ -276,7 +283,7 @@ typename RawIm::Pointer upsampleIm(typename RawIm::Pointer input, typename RawIm
   typedef typename RawIm::SizeType::SizeValueType SizeValueType;
 
 
-  for (unsigned i = 0; i < dim; i++)
+  for (int i = 0; i < dim; i++)
     {
     //spacing[i] = inputSpacing[i]/factor;
     float factor = inputSpacing[i]/NewSpacing[i];
@@ -348,6 +355,9 @@ void segArtery(const CmdLineType &CmdLineObj)
   typedef typename itk::Image<unsigned char, dim> MaskImType;
 
   typename RawImType::Pointer rawIm = readImOrient<RawImType>(CmdLineObj.InputIm);
+
+  
+
   // preprocess the rawIm to remove the jugular
   {
   typename MaskImType::Pointer jugMarkerIm = readImOrient<MaskImType>(CmdLineObj.JugularIm);
@@ -356,60 +366,13 @@ void segArtery(const CmdLineType &CmdLineObj)
 
   writeIm<RawImType>(noJugular, "/tmp/nojug.nii.gz");
   }
-  return;
   typename MaskImType::Pointer pointIm = readImOrient<MaskImType>(CmdLineObj.MarkerIm);
 
-  // dodgy use of scoping to make sure that intermediate images get deleted
-  typename RawImType::Pointer costIm, gradIm;
-  {
   // compute a cost image - carotid should be dark
-  typename RawImType::Pointer basecostIm = computeCostIm<RawImType, MaskImType>(rawIm, pointIm, CmdLineObj.Labels);
-  // now compute a gradient of the raw image
-  if (CmdLineObj.morphGrad)
-    {
-    std::cout << "Morph gradient" << std::endl;
-    gradIm = doGradientOuterMM<RawImType>(rawIm, 0.5);
-    }
-  else
-    {
-    typedef typename itk::GradientMagnitudeRecursiveGaussianImageFilter<RawImType, RawImType> GradMagType;
-    typename GradMagType::Pointer gradfilt = GradMagType::New();
-    gradfilt->SetInput(rawIm);
-    gradfilt->SetSigma(0.5);
-    gradIm = gradfilt->GetOutput();
-    gradIm->Update();
-    gradIm->DisconnectPipeline();
-    }
+  typename RawImType::Pointer costIm = computeCostIm<RawImType, MaskImType>(rawIm, pointIm, CmdLineObj.Labels);
 
-  // combine the gradient image and the cost image - use a max
-  // function for want of anything better. Might need to be careful
-  // about this if gradient changes
-
-  typedef typename itk::SquareImageFilter<RawImType, RawImType> SquareType;
-  typename SquareType::Pointer sqrfilt = SquareType::New();
-  sqrfilt->SetInput(gradIm);
-  
-  // set low gradients to zero
-  typedef typename itk::ThresholdImageFilter<RawImType> ThreshType;
-  typename ThreshType::Pointer thresh = ThreshType::New();
-
-  thresh->SetInput(sqrfilt->GetOutput());
-  thresh->SetLower(5); // WARNING - magic number
-  thresh->SetUpper(1000);
-  thresh->SetOutsideValue((typename RawImType::PixelType)0.0);
-
-  typedef typename itk::AddImageFilter<RawImType, RawImType, RawImType> AddType;
-  typename AddType::Pointer addfilt = AddType::New();
-  
-  addfilt->SetInput(thresh->GetOutput());
-  addfilt->SetInput2(basecostIm);
-  costIm = addfilt->GetOutput();
-  costIm->Update();
-  costIm->DisconnectPipeline();
-  }
   typedef typename itk::MinimalPathImageFilter<RawImType, MaskImType> MinPathType;
   typename MinPathType::Pointer path = MinPathType::New();
-
 
   // convert the labels to the correct type
   std::vector<typename MaskImType::PixelType> LVec;
@@ -460,8 +423,8 @@ void segArtery(const CmdLineType &CmdLineObj)
   
   // now we need to turn the path image into a marker
   typename MaskImType::Pointer finalMarker = createMarker<MaskImType>(cPath, CmdLineObj.radius);
-  // now compute a gradient of the raw image - recomputing instead of
-  // cropping in case we have resampled
+  // now compute a gradient of the raw image
+  typename RawImType::Pointer gradIm;
   if (CmdLineObj.morphGrad)
     {
     std::cout << "Morph gradient" << std::endl;

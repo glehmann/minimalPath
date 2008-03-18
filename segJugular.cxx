@@ -6,6 +6,10 @@
 
 #include <itkGradientMagnitudeRecursiveGaussianImageFilter.h>
 #include "itkMorphologicalWatershedFromMarkersImageFilter.h"
+#include <itkResampleImageFilter.h>
+#include <itkIdentityTransform.h>
+#include <itkLinearInterpolateImageFunction.h>
+#include <itkNearestNeighborInterpolateImageFunction.h>
 
 typedef class CmdLineType
 {
@@ -57,7 +61,85 @@ void ParseCmdLine(int argc, char* argv[],
 
 
 /////////////////////////////////////////////////////
+/////////////////////////////////////////////////////
+template  <class RawIm>
+typename RawIm::Pointer upsampleIm(typename RawIm::Pointer input, typename RawIm::SpacingType NewSpacing, int interp=0)
+{
+  const int dim = RawIm::ImageDimension;
+  typedef typename RawIm::PixelType PixelType;
+
+  typedef typename itk::ResampleImageFilter<RawIm, RawIm >  ResampleFilterType;
+  typedef typename itk::IdentityTransform< double, dim >  TransformType;
+  typename ResampleFilterType::Pointer resampler = ResampleFilterType::New();
+
+  input->Update();
+
+  typename TransformType::Pointer transform = TransformType::New();
+  transform->SetIdentity();
+  resampler->SetTransform( transform );
+  typedef typename itk::LinearInterpolateImageFunction<RawIm, double >  LInterpolatorType;
+  typedef typename itk::NearestNeighborInterpolateImageFunction<RawIm, double >  NNInterpolatorType;
+
+  typename ResampleFilterType::InterpolatorPointerType interpolator;
+  switch (interp)
+    {
+    case 0:
+      interpolator = NNInterpolatorType::New();
+      break;
+    case 1:
+      interpolator = LInterpolatorType::New();
+      break;
+    default:
+      std::cout << "Unsupported interpolator" << std::endl;
+    }
+
+  resampler->SetInterpolator( interpolator );
+  resampler->SetDefaultPixelValue( 0 );
+
+  const typename RawIm::SpacingType& inputSpacing = input->GetSpacing();
+  typename RawIm::SpacingType spacing;
+  typename RawIm::SizeType   inputSize = input->GetLargestPossibleRegion().GetSize();
+  typename RawIm::SizeType   size;
+  typedef typename RawIm::SizeType::SizeValueType SizeValueType;
+
+
+  for (int i = 0; i < dim; i++)
+    {
+    //spacing[i] = inputSpacing[i]/factor;
+    float factor = inputSpacing[i]/NewSpacing[i];
+    size[i] = static_cast< SizeValueType >( inputSize[i] * factor );
+    }
+//   std::cout << inputSpacing << NewSpacing << std::endl;
+//   std::cout << inputSize << size << input->GetOrigin() << std::endl;
+  
+  resampler->SetSize( size );
+  resampler->SetOutputSpacing( NewSpacing );
+  resampler->SetOutputOrigin( input->GetOrigin() );
+  resampler->SetInput(input);
+  typename RawIm::Pointer result = resampler->GetOutput();
+  result->Update();
+  result->DisconnectPipeline();
+  return(result);
+}
 ////////////////////////////////////////////////////////////////////
+template <class LImage>
+typename LImage::Pointer makeMarker(typename LImage::Pointer labelIm)
+{
+  // select the label value 1 (temporary), invert, erode, combine
+  typedef typename itk::BinaryThresholdImageFilter<LImage,LImage> ThreshType;
+  typename ThreshType::Pointer selector = ThreshType::New();
+  selector->SetInput(wshed->GetOutput());
+  selector->SetLowerThreshold(1);
+  selector->SetUpperThreshold(1);
+  selector->SetInsideValue(1);
+  selector->SetOutsideValue(0);
+
+
+
+
+}
+////////////////////////////////////////////////////////////////////
+
 template <class RImage, class LImage>
 typename LImage::Pointer maskJugular(typename RImage::Pointer rawIm,
 				     typename LImage::Pointer labelIm)
@@ -69,12 +151,15 @@ typename LImage::Pointer maskJugular(typename RImage::Pointer rawIm,
   typedef typename itk::GradientMagnitudeRecursiveGaussianImageFilter<RImage, RImage> GradMagType;
   typename GradMagType::Pointer gradfilt = GradMagType::New();
   gradfilt->SetInput(rawIm);
-  gradfilt->SetSigma(0.5);
+  gradfilt->SetSigma(1.5);
   gradIm = gradfilt->GetOutput();
   gradIm->Update();
   gradIm->DisconnectPipeline();
   }
 
+  LImage::Pointer marker = makeMarker<LImage>(labelIm);
+
+  writeIm<RImage>(gradIm, "/tmp/gradient.nii.gz");
   typedef typename itk::MorphologicalWatershedFromMarkersImageFilter<RImage, LImage> WShedType;
   typename WShedType::Pointer wshed = WShedType::New();
   wshed->SetInput(gradIm);
@@ -103,13 +188,24 @@ void segJugular(const CmdLineType &CmdLineObj)
   typedef typename itk::Image<unsigned char, dim> MaskImType;
 
   typename RawImType::Pointer rawIm = readImOrient<RawImType>(CmdLineObj.InputIm);
+  typename MaskImType::Pointer jugMarkerIm = readImOrient<MaskImType>(CmdLineObj.JugularIm);
+  typename RawImType::SpacingType sp = rawIm->GetSpacing();
+
+//   if (sp[2] > 0.75) 
+//     {
+//     sp[2] = 0.75;
+//     rawIm = upsampleIm<RawImType>(rawIm, sp, 1);
+//     jugMarkerIm = upsampleIm<MaskImType>(jugMarkerIm, sp, 0);
+//     }
   // preprocess the rawIm to remove the jugular
   {
-  typename MaskImType::Pointer jugMarkerIm = readImOrient<MaskImType>(CmdLineObj.JugularIm);
+  
   
   typename MaskImType::Pointer Jugular = maskJugular<RawImType, MaskImType>(rawIm, jugMarkerIm);
   writeIm<MaskImType>(Jugular, CmdLineObj.OutputIm);
+  writeIm<MaskImType>(jugMarkerIm, "/tmp/marker.nii.gz");  
   }
+    
   writeIm<RawImType>(rawIm, CmdLineObj.ReorientedIm);
   return;
 }
