@@ -101,7 +101,7 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 
   // reset the cost vector
   m_CostVector.assign(0, 0.0);
-  for (int i=0;i<m_LabelChain.size()-1;i++)
+  for (unsigned i=0;i<m_LabelChain.size()-1;i++)
     {
     if ((m_LabelChain[i] != 0) && (m_LabelChain[i+1] != 0))
       {

@@ -3,7 +3,9 @@
 
 #include <itkBinaryThresholdImageFilter.h>
 #include "ioutils.h"
+#include "morphutils.h"
 
+#include <itkMaximumImageFilter.h>
 #include <itkGradientMagnitudeRecursiveGaussianImageFilter.h>
 #include "itkMorphologicalWatershedFromMarkersImageFilter.h"
 #include <itkResampleImageFilter.h>
@@ -125,18 +127,32 @@ typename RawIm::Pointer upsampleIm(typename RawIm::Pointer input, typename RawIm
 template <class LImage>
 typename LImage::Pointer makeMarker(typename LImage::Pointer labelIm)
 {
-  // select the label value 1 (temporary), invert, erode, combine
+  // select the label value 1 (temporary), dilate, invert, combine
   typedef typename itk::BinaryThresholdImageFilter<LImage,LImage> ThreshType;
   typename ThreshType::Pointer selector = ThreshType::New();
-  selector->SetInput(wshed->GetOutput());
+  selector->SetInput(labelIm);
   selector->SetLowerThreshold(1);
   selector->SetUpperThreshold(1);
   selector->SetInsideValue(1);
   selector->SetOutsideValue(0);
 
+  typename LImage::Pointer dilated = doDilateMM<LImage>(selector->GetOutput(), 15);
+  typename ThreshType::Pointer invertor = ThreshType::New();
+  invertor->SetInput(dilated);
+  invertor->SetLowerThreshold(1);
+  invertor->SetUpperThreshold(1);
+  invertor->SetInsideValue(0);
+  invertor->SetOutsideValue(2);
 
-
-
+  typedef typename itk::MaximumImageFilter<LImage, LImage, LImage> MaxType;
+  typename MaxType::Pointer maxfilt = MaxType::New();
+  maxfilt->SetInput(labelIm);
+  maxfilt->SetInput2(invertor->GetOutput());
+  
+  typename LImage::Pointer result = maxfilt->GetOutput();
+  result->Update();
+  result->DisconnectPipeline();
+  return(result);
 }
 ////////////////////////////////////////////////////////////////////
 
@@ -157,13 +173,13 @@ typename LImage::Pointer maskJugular(typename RImage::Pointer rawIm,
   gradIm->DisconnectPipeline();
   }
 
-  LImage::Pointer marker = makeMarker<LImage>(labelIm);
-
+  typename LImage::Pointer marker = makeMarker<LImage>(labelIm);
+  writeIm<LImage>(marker, "/tmp/marker.nii.gz");
   writeIm<RImage>(gradIm, "/tmp/gradient.nii.gz");
   typedef typename itk::MorphologicalWatershedFromMarkersImageFilter<RImage, LImage> WShedType;
   typename WShedType::Pointer wshed = WShedType::New();
   wshed->SetInput(gradIm);
-  wshed->SetMarkerImage(labelIm);
+  wshed->SetMarkerImage(marker);
   wshed->SetFullyConnected(false);
   wshed->SetMarkWatershedLine(false);
   // select the vessel and delete the background marker
