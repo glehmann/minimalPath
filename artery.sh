@@ -3,11 +3,12 @@
 
 TMP=`mktemp -td carotid.XXXX`
 
-trap  'rm -rf $TMP; exit 0' 0 1 2 3 14 15
+#trap  'rm -rf $TMP; exit 0' 0 1 2 3 14 15
 echo $TMP
 
 LABPROG=$HOME/Projects/ITK/connectedComponent/testLabelling
-SEGPROG=$HOME/Projects/ITK/minimalPath/segArtery2
+#SEGPROG=$HOME/Projects/ITK/minimalPath/segArtery2
+SEGPROG=/tmp/Build/segArtery2
 STLPROG=$HOME/Projects/ITK/meshing/SurfaceExtraction2
 SNAP=/usr/local/bin/InsightSNAP
 

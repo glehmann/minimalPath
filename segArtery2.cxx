@@ -5,6 +5,7 @@
 
 #include "itkMinimalPathImageFilter.h"
 #include <itkLabelStatisticsImageFilter.h>
+#include <itkStatisticsImageFilter.h>
 #include <itkShiftScaleImageFilter.h>
 #include <itkAbsImageFilter.h>
 #include <itkHistogram.h>
@@ -13,7 +14,7 @@
 #include <itkMaximumImageFilter.h>
 #include <itkAddImageFilter.h>
 #include <itkSquareImageFilter.h>
-
+#include <itkShiftScaleImageFilter.h>
 #include <itkResampleImageFilter.h>
 #include <itkIdentityTransform.h>
 #include <itkLinearInterpolateImageFunction.h>
@@ -121,7 +122,7 @@ typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
 				       const std::vector<int> &labels, 
 				       typename RImage::PixelType CalciteThresh=500)
 {
-  typedef itk::LabelStatisticsImageFilter<RImage, LImage> LabStatsType;
+  typedef typename itk::LabelStatisticsImageFilter<RImage, LImage> LabStatsType;
   typename LabStatsType::Pointer labstats = LabStatsType::New();
 
   labstats->SetInput(raw);
@@ -145,17 +146,56 @@ typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
     Mn += labstats->GetMean(*i);
     }
   Mn /= UniqueLabs.size();
-  
+
   // use a threshold to deal with calcite in the artery before
   // creating the cost image
   typedef typename itk::ThresholdImageFilter<RImage> ThreshType;
   typename ThreshType::Pointer thresh = ThreshType::New();
+  thresh->SetInput(raw);
   thresh->ThresholdAbove(Mn + CalciteThresh);
+
+  typename RImage::Pointer filtered = doWhiteTopHatMM<RImage>(raw, 5, 5, 1);
+  writeIm<RImage>(filtered, "/tmp/th.nii.gz");
+
+  // recalculate the mean
+  labstats->SetInput(filtered);
+  labstats->Update();
+
+  Mn = 0.0;
+  for (IntSet::const_iterator i = UniqueLabs.begin();i != UniqueLabs.end();i++)
+    {
+    Mn += labstats->GetMean(*i);
+    }
+  Mn /= UniqueLabs.size();
+
 
   typedef typename itk::AbsDiffConstantImageFilter<RImage, RImage> AbsDiffType;
   typename AbsDiffType::Pointer AbsDiff = AbsDiffType::New();
-  AbsDiff->SetInput(thresh->GetOutput());
+  AbsDiff->SetInput(filtered);
+  // AbsDiff->SetInput(thresh->GetOutput());
+  //AbsDiff->SetInput(tophat);
   AbsDiff->SetVal(Mn);
+  // more filtering to remove the large dark areas, like jugular etc
+  // morphological top hat to eliminate large structures - like the jugular
+//   typename RImage::Pointer brightCarotid = doBlackTopHatMM<RImage>(AbsDiff->GetOutput(), 11, 11, 1);
+  
+//   writeIm<RImage>(AbsDiff->GetOutput(), "/tmp/darkCarotid.nii.gz");
+//   writeIm<RImage>(brightCarotid, "/tmp/brightCarotid.nii.gz");
+//   // invert again
+//   typedef typename itk::StatisticsImageFilter<RImage> StatsType;
+//   typedef typename itk::ShiftScaleImageFilter<RImage, RImage> InvType;
+//   typename StatsType::Pointer stats = StatsType::New();
+//   stats->SetInput(brightCarotid);
+//   stats->Update();
+//   typename LImage::PixelType Mx = (typename LImage::PixelType)stats->GetMaximum();
+
+//   typename InvType::Pointer invert = InvType::New();
+//   invert->SetInput(brightCarotid);
+//   invert->SetScale(-1);
+//   invert->SetShift(-Mx);
+
+//   //AbsDiff->GetOutput();
+//   typename RImage::Pointer result = invert->GetOutput();
   typename RImage::Pointer result = AbsDiff->GetOutput();
   result->Update();
   result->DisconnectPipeline();
@@ -358,17 +398,18 @@ void segArtery(const CmdLineType &CmdLineObj)
 
   // preprocess the rawIm to remove the jugular
   {
-  typename MaskImType::Pointer jugMarkerIm = readImOrient<MaskImType>(CmdLineObj.JugularIm);
+//   typename MaskImType::Pointer jugMarkerIm = readImOrient<MaskImType>(CmdLineObj.JugularIm);
   
-  typename RawImType::Pointer noJugular = maskJugular<RawImType, MaskImType>(rawIm, jugMarkerIm);
+//   typename RawImType::Pointer noJugular = maskJugular<RawImType, MaskImType>(rawIm, jugMarkerIm);
 
-  writeIm<RawImType>(noJugular, "/tmp/nojug.nii.gz");
+//   writeIm<RawImType>(noJugular, "/tmp/nojug.nii.gz");
   }
   typename MaskImType::Pointer pointIm = readImOrient<MaskImType>(CmdLineObj.MarkerIm);
 
   // compute a cost image - carotid should be dark
   typename RawImType::Pointer costIm = computeCostIm<RawImType, MaskImType>(rawIm, pointIm, CmdLineObj.Labels);
 
+  writeIm<RawImType>(costIm, "/tmp/cost.nii.gz");
   typedef typename itk::MinimalPathImageFilter<RawImType, MaskImType> MinPathType;
   typename MinPathType::Pointer path = MinPathType::New();
 

@@ -144,6 +144,8 @@ typename LImage::Pointer makeMarker(typename LImage::Pointer labelIm)
   invertor->SetInsideValue(0);
   invertor->SetOutsideValue(2);
 
+  writeIm<LImage>(invertor->GetOutput(), "/tmp/bg.nii.gz");
+
   typedef typename itk::MaximumImageFilter<LImage, LImage, LImage> MaxType;
   typename MaxType::Pointer maxfilt = MaxType::New();
   maxfilt->SetInput(labelIm);
@@ -167,7 +169,7 @@ typename LImage::Pointer maskJugular(typename RImage::Pointer rawIm,
   typedef typename itk::GradientMagnitudeRecursiveGaussianImageFilter<RImage, RImage> GradMagType;
   typename GradMagType::Pointer gradfilt = GradMagType::New();
   gradfilt->SetInput(rawIm);
-  gradfilt->SetSigma(1.5);
+  gradfilt->SetSigma(0.75);
   gradIm = gradfilt->GetOutput();
   gradIm->Update();
   gradIm->DisconnectPipeline();
@@ -219,7 +221,7 @@ void segJugular(const CmdLineType &CmdLineObj)
   
   typename MaskImType::Pointer Jugular = maskJugular<RawImType, MaskImType>(rawIm, jugMarkerIm);
   writeIm<MaskImType>(Jugular, CmdLineObj.OutputIm);
-  writeIm<MaskImType>(jugMarkerIm, "/tmp/marker.nii.gz");  
+  //writeIm<MaskImType>(jugMarkerIm, "/tmp/marker.nii.gz");  
   }
     
   writeIm<RawImType>(rawIm, CmdLineObj.ReorientedIm);
