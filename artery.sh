@@ -7,8 +7,8 @@ TMP=`mktemp -td carotid.XXXX`
 echo $TMP
 
 LABPROG=$HOME/Projects/ITK/connectedComponent/testLabelling
-#SEGPROG=$HOME/Projects/ITK/minimalPath/segArtery2
-SEGPROG=/tmp/Build/segArtery2
+SEGPROG=$HOME/Projects/ITK/minimalPath/segArtery2
+#SEGPROG=/tmp/Build/segArtery2
 STLPROG=$HOME/Projects/ITK/meshing/SurfaceExtraction2
 SNAP=/usr/local/bin/InsightSNAP
 
@@ -42,7 +42,7 @@ else
 fi
 
 if [ -e $1 ]; then
-    $CONV  $1 $CONTROL
+    $CONV -signed -short $1 $CONTROL
 else
   echo "No such file $1"
   exit

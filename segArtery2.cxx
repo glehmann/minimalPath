@@ -120,7 +120,7 @@ template <class RImage, class LImage>
 typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
 				       typename LImage::Pointer marker,
 				       const std::vector<int> &labels, 
-				       typename RImage::PixelType CalciteThresh=500)
+				       typename RImage::PixelType CalciteThresh=150)
 {
   typedef typename itk::LabelStatisticsImageFilter<RImage, LImage> LabStatsType;
   typename LabStatsType::Pointer labstats = LabStatsType::New();
@@ -152,9 +152,11 @@ typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
   typedef typename itk::ThresholdImageFilter<RImage> ThreshType;
   typename ThreshType::Pointer thresh = ThreshType::New();
   thresh->SetInput(raw);
-  thresh->ThresholdAbove(Mn + CalciteThresh);
+  thresh->SetUpper(Mn + CalciteThresh);
+  thresh->SetOutsideValue(0);
+  writeIm<RImage>(thresh->GetOutput(), "/tmp/thresh.nii.gz");
 
-  typename RImage::Pointer filtered = doWhiteTopHatMM<RImage>(raw, 5, 5, 1);
+  typename RImage::Pointer filtered = doWhiteTopHatMM<RImage>(raw, 3, 3, 1);
   writeIm<RImage>(filtered, "/tmp/th.nii.gz");
 
   // recalculate the mean
