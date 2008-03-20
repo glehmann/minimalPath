@@ -18,11 +18,23 @@ RM=/bin/rm
 CONV=mnc2nii
 RESJUGMARK=$TMP/jugmarker.mnc
 JUGMARK=$TMP/jugmark.nii
+RANGE=$TMP/rangecorrected.mnc
 
 CONTROL=$TMP/control.nii
 RERAW=$TMP/reorient.nii
 # $1 will be the original image, $2 the marker
 
+function getMaxMin()
+{
+  MAX=`mincstats -quiet -max $1`
+  MIN=`mincstats -quiet -min $1`
+}
+
+function correctMaxMin()
+{
+    getMaxMin $1
+    mincresample -range $MIN $MAX $1 $2
+}
 
 if [ -e $2 ]; then
    # resample the marker to be like the input
@@ -34,7 +46,8 @@ else
 fi
 
 if [ -e $1 ]; then
-    $CONV  $1 $CONTROL
+    correctMaxMin $1 $RANGE
+    $CONV -float $RANGE $CONTROL
 else
   echo "No such file $1"
   exit
