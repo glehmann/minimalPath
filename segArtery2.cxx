@@ -20,9 +20,9 @@
 #include <itkLinearInterpolateImageFunction.h>
 #include <itkNearestNeighborInterpolateImageFunction.h>
 #include <itkMaskNegatedImageFilter.h>
-
+#include <itkImageDuplicator.h>
 #include "itkExtractImageFilter.h"
-
+#include "itkSubstituteMaskImageFilter.h"
 #include "ioutils.h"
 
 
@@ -119,7 +119,8 @@ void ParseCmdLine(int argc, char* argv[],
 template <class RImage, class LImage>
 typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
 				       typename LImage::Pointer marker,
-				       const std::vector<int> &labels, 
+				       const std::vector<int> &labels,
+				       float &CarotidMean,
 				       typename RImage::PixelType CalciteThresh=150)
 {
   typedef typename itk::LabelStatisticsImageFilter<RImage, LImage> LabStatsType;
@@ -147,6 +148,8 @@ typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
     }
   Mn /= UniqueLabs.size();
 
+  CarotidMean = Mn;
+
   // use a threshold to deal with calcite in the artery before
   // creating the cost image
   typedef typename itk::ThresholdImageFilter<RImage> ThreshType;
@@ -154,50 +157,12 @@ typename RImage::Pointer computeCostIm(typename RImage::Pointer raw,
   thresh->SetInput(raw);
   thresh->SetUpper(Mn + CalciteThresh);
   thresh->SetOutsideValue(0);
-  writeIm<RImage>(thresh->GetOutput(), "/tmp/thresh.nii.gz");
-
-  typename RImage::Pointer filtered = doWhiteTopHatMM<RImage>(raw, 3, 3, 1);
-  writeIm<RImage>(filtered, "/tmp/th.nii.gz");
-
-  // recalculate the mean
-  labstats->SetInput(filtered);
-  labstats->Update();
-
-  Mn = 0.0;
-  for (IntSet::const_iterator i = UniqueLabs.begin();i != UniqueLabs.end();i++)
-    {
-    Mn += labstats->GetMean(*i);
-    }
-  Mn /= UniqueLabs.size();
 
 
   typedef typename itk::AbsDiffConstantImageFilter<RImage, RImage> AbsDiffType;
   typename AbsDiffType::Pointer AbsDiff = AbsDiffType::New();
-  AbsDiff->SetInput(filtered);
-  // AbsDiff->SetInput(thresh->GetOutput());
-  //AbsDiff->SetInput(tophat);
+  AbsDiff->SetInput(thresh->GetOutput());
   AbsDiff->SetVal(Mn);
-  // more filtering to remove the large dark areas, like jugular etc
-  // morphological top hat to eliminate large structures - like the jugular
-//   typename RImage::Pointer brightCarotid = doBlackTopHatMM<RImage>(AbsDiff->GetOutput(), 11, 11, 1);
-  
-//   writeIm<RImage>(AbsDiff->GetOutput(), "/tmp/darkCarotid.nii.gz");
-//   writeIm<RImage>(brightCarotid, "/tmp/brightCarotid.nii.gz");
-//   // invert again
-//   typedef typename itk::StatisticsImageFilter<RImage> StatsType;
-//   typedef typename itk::ShiftScaleImageFilter<RImage, RImage> InvType;
-//   typename StatsType::Pointer stats = StatsType::New();
-//   stats->SetInput(brightCarotid);
-//   stats->Update();
-//   typename LImage::PixelType Mx = (typename LImage::PixelType)stats->GetMaximum();
-
-//   typename InvType::Pointer invert = InvType::New();
-//   invert->SetInput(brightCarotid);
-//   invert->SetScale(-1);
-//   invert->SetShift(-Mx);
-
-//   //AbsDiff->GetOutput();
-//   typename RImage::Pointer result = invert->GetOutput();
   typename RImage::Pointer result = AbsDiff->GetOutput();
   result->Update();
   result->DisconnectPipeline();
@@ -343,47 +308,56 @@ typename RawIm::Pointer upsampleIm(typename RawIm::Pointer input, typename RawIm
 }
 ////////////////////////////////////////////////////////////////////
 template <class RImage, class LImage>
-typename RImage::Pointer maskJugular(typename RImage::Pointer rawIm,
-				     typename LImage::Pointer labelIm)
+typename RImage::Pointer maskJugular(typename RImage::Pointer costIm,
+				     typename RImage::Pointer rawIm,
+				     typename LImage::Pointer jugularIm,
+				     float CarotidMean)
 {
-  // use a watershed to segment jugular from everything else
-  typename RImage::Pointer gradIm;
-  {
-  // compute gradient
-  typedef typename itk::GradientMagnitudeRecursiveGaussianImageFilter<RImage, RImage> GradMagType;
-  typename GradMagType::Pointer gradfilt = GradMagType::New();
-  gradfilt->SetInput(rawIm);
-  gradfilt->SetSigma(0.5);
-  gradIm = gradfilt->GetOutput();
-  gradIm->Update();
-  gradIm->DisconnectPipeline();
-  }
 
-  typedef typename itk::MorphologicalWatershedFromMarkersImageFilter<RImage, LImage> WShedType;
-  typename WShedType::Pointer wshed = WShedType::New();
-  wshed->SetInput(gradIm);
-  wshed->SetMarkerImage(labelIm);
-  wshed->SetFullyConnected(false);
-  wshed->SetMarkWatershedLine(false);
-  // select the vessel and delete the background marker
-  typedef typename itk::BinaryThresholdImageFilter<LImage,LImage> ThreshType;
-  typename ThreshType::Pointer selector = ThreshType::New();
-  selector->SetInput(wshed->GetOutput());
-  selector->SetLowerThreshold(1);
-  selector->SetUpperThreshold(1);
-  selector->SetInsideValue(1);
-  selector->SetOutsideValue(0);
+  // check the mean intensity of the region defined by the jugular
+  // mask. If it is similar to that of the carotid markers then we
+  // need can probably assume that the segmentation is good and that
+  // we need to get rid of the jugular.
+  
+  typedef typename itk::LabelStatisticsImageFilter<RImage, LImage> LabStatsType;
+  typename LabStatsType::Pointer labstats = LabStatsType::New();
 
-  writeIm<LImage>(selector->GetOutput(), "/tmp/mask.nii.gz");
-  writeIm<RImage>(rawIm, "/tmp/raw.nii.gz");
+  labstats->SetInput(rawIm);
+  labstats->SetLabelInput(jugularIm);
+  labstats->Update();
 
-  typedef typename itk::MaskNegatedImageFilter<RImage, LImage, RImage> MaskerType;
-  typename MaskerType::Pointer masker = MaskerType::New();
-  masker->SetInput(rawIm);
-  masker->SetInput2(selector->GetOutput());
-  typename RImage::Pointer result = masker->GetOutput();
-  result->Update();
-  result->DisconnectPipeline();
+  float JugularMean = labstats->GetMean(1);
+  float JugularSig = labstats->GetSigma(1);
+
+  std::cout << CarotidMean << "\t"<< JugularMean << "\t"<< JugularSig << std::endl;
+  typename RImage::Pointer result;
+  if (fabs(JugularMean - CarotidMean) < 100*JugularSig)
+    {
+    std::cout << "Masking " << std::endl;
+    // similar - assume jugular segmentation is OK
+    // this is the cost image, so we need to make the jugular cost
+    // high - set every position in the jugular mask to 500.
+    typedef typename itk::SubstituteMaskImageFilter<RImage, LImage, RImage> SubstType;
+    typename SubstType::Pointer sub = SubstType::New();
+    sub->SetInput(costIm);
+    sub->SetInput2(jugularIm);
+    sub->SetVal(500.0);
+    result = sub->GetOutput();
+    result->Update();
+    result->DisconnectPipeline();
+    }
+  else
+    {
+    // return a copy
+    std::cout << "Returning copy" << std::endl;
+    typedef typename itk::ImageDuplicator<RImage> DupType;
+    typename DupType::Pointer dup = DupType::New();
+    dup->SetInputImage(costIm);
+    dup->Update();
+    result = dup->GetOutput();
+    result->Update();
+    //result->DisconnectPipeline();
+    }
   return(result);
 }
 
@@ -398,18 +372,21 @@ void segArtery(const CmdLineType &CmdLineObj)
 
   
 
-  // preprocess the rawIm to remove the jugular
-  {
-//   typename MaskImType::Pointer jugMarkerIm = readImOrient<MaskImType>(CmdLineObj.JugularIm);
-  
-//   typename RawImType::Pointer noJugular = maskJugular<RawImType, MaskImType>(rawIm, jugMarkerIm);
 
-//   writeIm<RawImType>(noJugular, "/tmp/nojug.nii.gz");
-  }
   typename MaskImType::Pointer pointIm = readImOrient<MaskImType>(CmdLineObj.MarkerIm);
 
   // compute a cost image - carotid should be dark
-  typename RawImType::Pointer costIm = computeCostIm<RawImType, MaskImType>(rawIm, pointIm, CmdLineObj.Labels);
+  float CarotidMean;
+  typename RawImType::Pointer costIm = computeCostIm<RawImType, MaskImType>(rawIm, pointIm, CmdLineObj.Labels, CarotidMean);
+
+
+  // preprocess the rawIm to remove the jugular
+  {
+  typename MaskImType::Pointer jugMarkerIm = readImOrient<MaskImType>(CmdLineObj.JugularIm);
+  typename RawImType::Pointer noJugular = maskJugular<RawImType, MaskImType>(costIm, rawIm, jugMarkerIm, CarotidMean);
+  
+  costIm = noJugular;
+  }
 
   writeIm<RawImType>(costIm, "/tmp/cost.nii.gz");
   typedef typename itk::MinimalPathImageFilter<RawImType, MaskImType> MinPathType;

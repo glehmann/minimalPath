@@ -7,8 +7,8 @@ TMP=`mktemp -td jugular.XXXX`
 echo $TMP
 
 #BUILD32=Build32
-#SEGPROG=/home/richardb/Projects/ITK/minimalPath/${BUILD32}/segJugular
-SEGPROG=/tmp/Build/segJugular
+SEGPROG=/home/richardb/Projects/ITK/minimalPath/${BUILD32}/segJugular
+#SEGPROG=/tmp/Build/segJugular
 SNAP=/usr/local/bin/InsightSNAP
 
 RM=/bin/rm

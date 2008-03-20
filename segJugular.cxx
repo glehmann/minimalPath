@@ -13,7 +13,6 @@
 #include <itkLinearInterpolateImageFunction.h>
 #include <itkNearestNeighborInterpolateImageFunction.h>
 #include <itkChangeLabelImageFilter.h>
-#include "itkReconstructionByDilationImageFilter.h"
 #include <itkMaskImageFilter.h>
 
 typedef class CmdLineType
@@ -167,27 +166,6 @@ typename LImage::Pointer maskJugular(typename RImage::Pointer rawIm,
 {
   typedef typename itk::BinaryThresholdImageFilter<LImage,LImage> ThreshType;
 
-  // apply a morphological reconstruction to the raw image
-  typedef typename itk::ReconstructionByDilationImageFilter<RImage, RImage> ReconType;
-  typedef typename itk::MaskImageFilter<RImage, LImage, RImage> MaskType;
-  typename ThreshType::Pointer jugselect = ThreshType::New();
-  jugselect->SetInput(labelIm);
-  jugselect->SetLowerThreshold(1);
-  jugselect->SetUpperThreshold(1);
-  jugselect->SetInsideValue(1);
-  jugselect->SetOutsideValue(0);
-  writeIm<LImage>(jugselect->GetOutput(), "/tmp/jmarker.nii.gz");
-
-  typename MaskType::Pointer masker = MaskType::New();
-  masker->SetInput(rawIm);
-  masker->SetInput2(jugselect->GetOutput());
-  writeIm<RImage>(masker->GetOutput(), "/tmp/rmarker.nii.gz");
-  typename ReconType::Pointer recon = ReconType::New();
-  typename RImage::Pointer eRaw = doErodeMM<RImage>(rawIm, 1);
-
-  recon->SetMaskImage(eRaw);
-  recon->SetMarkerImage(masker->GetOutput());
-  writeIm<RImage>(recon->GetOutput(), "/tmp/recon.nii.gz");
   // use a watershed to segment jugular from everything else
   typename RImage::Pointer gradIm;
   {
@@ -202,8 +180,6 @@ typename LImage::Pointer maskJugular(typename RImage::Pointer rawIm,
   }
 
   typename LImage::Pointer marker = makeMarker<LImage>(labelIm);
-  writeIm<LImage>(marker, "/tmp/marker.nii.gz");
-  writeIm<RImage>(gradIm, "/tmp/gradient.nii.gz");
   typedef typename itk::MorphologicalWatershedFromMarkersImageFilter<RImage, LImage> WShedType;
   typename WShedType::Pointer wshed = WShedType::New();
   wshed->SetInput(gradIm);
