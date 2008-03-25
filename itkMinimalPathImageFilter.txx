@@ -18,7 +18,7 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   this->SetNumberOfRequiredInputs(2);
   m_FullyConnected = true;
   m_UseDistWeights = true;
-  m_UnitCost = 1.0;
+  m_UnitCost = 0.0;
   m_StartLabel = 1;
   m_EndLabel = 2;
   m_MarkLabel = 0;

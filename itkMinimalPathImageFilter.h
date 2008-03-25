@@ -150,7 +150,8 @@ public:
   /** 
    * The UnitCost defines the cost of moving over pixels with
    * a brightness of zero. It is kind of redundant and may be removed.
-   * The default value is 1.0 */
+   * The default value is 0.0 - the correct way of dealing with this
+   * is to modify the cost image */
   itkSetMacro(UnitCost, CostPixType);
   itkGetConstReferenceMacro(UnitCost, CostPixType);
 
