@@ -3,6 +3,7 @@
 
 #include "itkMinimalPathImageFilter.h"
 #include "itkConnectedComponentAlgorithm.h"
+#include "itkConnectedComponentAlgorithmExtras.h"
 #include "itkImageRegionConstIterator.h"
 #include "itkImageRegionIterator.h"
 #include "itkConstantBoundaryCondition.h"
