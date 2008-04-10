@@ -1,5 +1,5 @@
-#ifndef __itkConnectedComponentAlgorithm_h
-#define __itkConnectedComponentAlgorithm_h
+#ifndef __itkConnectedComponentAlgorithmExtras_h
+#define __itkConnectedComponentAlgorithmExtras_h
 
 #include "itkImage.h"
 #include "itkConstShapedNeighborhoodIterator.h"
