@@ -88,10 +88,16 @@ int main(int argc, char * argv[])
   RGBwriter->Update();
 
   // save a marker image
-  OvFilt->SetLabelImage(reader2->GetOutput());
-  RGBwriter->SetFileName(argv[4]);
-  RGBwriter->Update();
+//   OvFilt->SetLabelImage(reader2->GetOutput());
+//   RGBwriter->SetFileName(argv[4]);
+//   RGBwriter->Update();
 
+  typedef itk::ImageFileWriter< IType > WriterType;
+
+  WriterType::Pointer writer = WriterType::New();
+  writer->SetInput(path->GetOutput());
+  writer->SetFileName(argv[4]);
+  writer->Update();
   return 0;
 }
 
