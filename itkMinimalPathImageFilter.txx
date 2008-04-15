@@ -19,7 +19,7 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   this->SetNumberOfRequiredInputs(2);
   m_FullyConnected = true;
   m_UseDistWeights = true;
-  m_UnitCost = 0.0;
+  m_UnitCost = 0.00001;  // should be machine epsilon
   m_StartLabel = 1;
   m_EndLabel = 2;
   m_MarkLabel = 0;
@@ -170,12 +170,9 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 	// record the start index to compute the sign of desired direction
 	StartIndex = Ind;
 	}
-      //inIt.SetIndex(Ind);
-      //costIt.SetIndex(Ind);
-      //costIt.Set(0);
       // mark the output label image
-      outIt.SetIndex(Ind);
-      outIt.Set(MarkLabel);
+//       outIt.SetIndex(Ind);
+//       outIt.Set(MarkLabel);
       // Insert in the queue (equal priority, 0)
       // Don't worry about finding pixels on the edge of the marker at
       // this stage because those issues will be dealt with when
@@ -193,8 +190,8 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 	FoundEnd = true;
 	EndIndex = Ind;
 	}
-      outIt.SetIndex(Ind);
-      outIt.Set(MarkLabel);
+//       outIt.SetIndex(Ind);
+//       outIt.Set(MarkLabel);
       }
     ++labIt;
     }
@@ -329,7 +326,7 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 	  InputImageOffsetType Off = sIt.GetNeighborhoodOffset();
 	  PixPriorityType NewPix;
 	  // the cost to reach the neighbor
-	  NewPix.priority = (m_UnitCost+sIt.Get()) * Weights[WIdx] + TopPix.priority;
+	  NewPix.priority = (m_UnitCost+(CostPixType)sIt.Get()) * Weights[WIdx] + TopPix.priority;
 	  if (NewPix.priority < cIt.Get())
 	    {
 	    // found a better path to the next pixel
@@ -356,28 +353,29 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 
   IndexType CentIndex = TopPix.location;
   costNIt += CentIndex - costNIt.GetIndex();
-  outNIt += CentIndex - outNIt.GetIndex();
 
-  outNIt.SetCenterPixel(MarkLabel);
-
-#if 0
+#if 1
   // a method that is meant to deal with situations with lots of
   // identical/zero cost paths. Doesn't really work.
-  inIt.SetIndex(CentIndex);
+  labIt.SetIndex(CentIndex);
+  outNIt += CentIndex - outNIt.GetIndex();
+  outNIt.SetCenterPixel(MarkLabel);
   for (;;)
     {
       typename NLabelIterator::ConstIterator lIt;
       typename CNCostIterator::ConstIterator cIt;
       // look for the smallest neighbor in the cost image
-      CostPixType MN = NumericTraits<CostPixType>::max();
       InputImageOffsetType MinOff;
       bool valid_neigh = false;
       // slightly more complex version which checks to see whether we
       // have already marked a voxel as being on the path to avoid
       // loops in zero cost zones
+      CostPixType MN = NumericTraits<CostPixType>::max();
+      
       for (cIt = costNIt.Begin(), lIt = outNIt.Begin();
 	   cIt != costNIt.End(); ++cIt, ++lIt)
 	{
+	// no good when getting to the last pixel
 	if (!lIt.Get())
 	  {
 	  valid_neigh = true;
@@ -399,9 +397,9 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
       costNIt += MinOff;
       outNIt += MinOff;
       outNIt.SetCenterPixel(MarkLabel);
-      inIt.SetIndex(CentIndex);
+      labIt.SetIndex(CentIndex);
       progress.CompletedPixel();
-      if (inIt.Get() == StartLabel)
+      if (labIt.Get() == StartLabel)
 	{
 	// reached the start label
 	break;
@@ -410,34 +408,41 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 #else
   outIt.SetIndex(CentIndex);
   outIt.Set(MarkLabel);
-  inIt.SetIndex(CentIndex);
+  labIt.SetIndex(CentIndex);
+  CostPixType MN = NumericTraits<CostPixType>::max();
   for (;;)
     {
       typename CNCostIterator::ConstIterator cIt;
       // look for the smallest neighbor in the cost image
-      CostPixType MN = NumericTraits<CostPixType>::max();
       InputImageOffsetType MinOff;
       // slightly more complex version which checks to see whether we
       // have already marked a voxel as being on the path to avoid
       // loops in zero cost zones
+      bool valid_neigh = false;
       for (cIt = costNIt.Begin(); cIt != costNIt.End(); ++cIt)
 	{
-	  CostPixType NVal = cIt.Get();
-	  //std::cout << NVal << " " << cIt.GetNeighborhoodOffset() << " " ;
-	  if (NVal < MN)
-	    {
-	    MN = NVal;
-	    MinOff = cIt.GetNeighborhoodOffset();
-	    }
+	CostPixType NVal = cIt.Get();
+	if (NVal < MN)
+	  {
+	  std::cout << NVal << " " << MN << std::endl;
+	  valid_neigh = true;
+	  MN = NVal;
+	  MinOff = cIt.GetNeighborhoodOffset();
 	  }
+	}
+      if (!valid_neigh)
+	{
+	itkWarningMacro(<< "No valid neighbors - probably a zero cost region. Try increasing UnitCost");
+	std::cout << MN << std::endl;
+	break;
 	}
       CentIndex += MinOff;
       costNIt += MinOff;
       outIt.SetIndex(CentIndex);
       outIt.Set(MarkLabel);
-      inIt.SetIndex(CentIndex);
+      labIt.SetIndex(CentIndex);
       progress.CompletedPixel();
-      if (inIt.Get() == StartLabel)
+      if (labIt.Get() == StartLabel)
 	{
 	// reached the start label
 	break;
