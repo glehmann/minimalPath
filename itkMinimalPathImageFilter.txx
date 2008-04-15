@@ -340,6 +340,12 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
       }
     }
 
+
+//   typedef typename itk::ImageFileWriter<CostImageType> WType;
+//   typename WType::Pointer wrt = WType::New();
+//   wrt->SetInput(CostImage);
+//   wrt->SetFileName("cost.nii");
+//   wrt->Update();
   // backtrack
   if (m_Direction != -1)
     {
@@ -354,7 +360,7 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
   IndexType CentIndex = TopPix.location;
   costNIt += CentIndex - costNIt.GetIndex();
 
-#if 1
+#if 0
   // a method that is meant to deal with situations with lots of
   // identical/zero cost paths. Doesn't really work.
   labIt.SetIndex(CentIndex);
@@ -371,31 +377,29 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
       // have already marked a voxel as being on the path to avoid
       // loops in zero cost zones
       CostPixType MN = NumericTraits<CostPixType>::max();
-      
-      for (cIt = costNIt.Begin(), lIt = outNIt.Begin();
-	   cIt != costNIt.End(); ++cIt, ++lIt)
+      //std::cout << CentIndex ;
+      for (cIt = costNIt.Begin(); cIt != costNIt.End(); ++cIt)
 	{
 	// no good when getting to the last pixel
-	if (!lIt.Get())
-	  {
-	  valid_neigh = true;
 	  CostPixType NVal = cIt.Get();
 	  //std::cout << NVal << " " << cIt.GetNeighborhoodOffset() << " " ;
 	  if (NVal < MN)
 	    {
+	    valid_neigh = true;
 	    MN = NVal;
 	    MinOff = cIt.GetNeighborhoodOffset();
 	    }
-	  }
 	}
+      //std::cout << std::endl;
       if (!valid_neigh)
 	{
-	itkWarningMacro(<< "Very strange path - giving up");
+	itkWarningMacro(<< "No valid neighbors - probably a zero cost region. Try increasing UnitCost");
 	break;
 	}
       CentIndex += MinOff;
       costNIt += MinOff;
       outNIt += MinOff;
+      costNIt.SetCenterPixel(NumericTraits<CostPixType>::max());
       outNIt.SetCenterPixel(MarkLabel);
       labIt.SetIndex(CentIndex);
       progress.CompletedPixel();
@@ -415,16 +419,14 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
       typename CNCostIterator::ConstIterator cIt;
       // look for the smallest neighbor in the cost image
       InputImageOffsetType MinOff;
-      // slightly more complex version which checks to see whether we
-      // have already marked a voxel as being on the path to avoid
-      // loops in zero cost zones
+
       bool valid_neigh = false;
       for (cIt = costNIt.Begin(); cIt != costNIt.End(); ++cIt)
 	{
 	CostPixType NVal = cIt.Get();
 	if (NVal < MN)
 	  {
-	  std::cout << NVal << " " << MN << std::endl;
+	  //std::cout << NVal << " " << MN << std::endl;
 	  valid_neigh = true;
 	  MN = NVal;
 	  MinOff = cIt.GetNeighborhoodOffset();

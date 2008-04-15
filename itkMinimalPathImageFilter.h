@@ -56,7 +56,7 @@ public:
   
   typedef typename LabelImageType::IndexType      IndexType;
   /** Used in the internal buffer to accumulate costs */
-  typedef float CostPixType;
+  typedef double CostPixType;
 
   /** A type to support a set of labels, rather than just start and
    * end */
@@ -149,10 +149,13 @@ public:
 
   /** 
    * The UnitCost defines the cost of moving over pixels with
-   * a brightness of zero. It is kind of redundant and may be removed.
-   * The default value is 0.001 - the correct way of dealing with this
-   * is to modify the cost image. This is necessary when there are
-   * regions with zero cost and we need to have a 'real' distance influence */
+   * a brightness of zero. If there are lots of zero cost pixels then
+   * the backtracking becomes difficult because it is easy to loop
+   * back on yourself in the flat zone. It is therefore best to
+   * provide a low cost of crossing a pixel. This can be done by
+   * adding a constant to the image, but this method lets you do it
+   * without changing the type of the input image.
+   * The default value is  0.00001. */
   itkSetMacro(UnitCost, CostPixType);
   itkGetConstReferenceMacro(UnitCost, CostPixType);
 

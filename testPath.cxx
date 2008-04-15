@@ -29,7 +29,7 @@ int main(int argc, char * argv[])
   MinPathType::Pointer path = MinPathType::New();
   path->SetInput( reader->GetOutput() );
   path->SetMarkerImage(reader2->GetOutput());
-  path->SetUnitCost(0.00001);
+  //path->SetUnitCost(0.00001);
   //itk::SimpleFilterWatcher watcher(path, "path");
 
   int repeats = atoi(argv[3]);
