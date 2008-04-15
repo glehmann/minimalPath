@@ -356,13 +356,13 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 
   IndexType CentIndex = TopPix.location;
   costNIt += CentIndex - costNIt.GetIndex();
-  //labNIt  += CentIndex - labNIt.GetIndex();
   outNIt += CentIndex - outNIt.GetIndex();
 
   outNIt.SetCenterPixel(MarkLabel);
 
-//   outIt.SetIndex(CentIndex);
-//   outIt.Set(MarkLabel);
+#if 0
+  // a method that is meant to deal with situations with lots of
+  // identical/zero cost paths. Doesn't really work.
   inIt.SetIndex(CentIndex);
   for (;;)
     {
@@ -395,14 +395,10 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 	itkWarningMacro(<< "Very strange path - giving up");
 	break;
 	}
-      //std::cout << std::endl;
-      //std::cout << "Backtrack " << CentIndex << " " << MN << " " <<valid_neigh << std::endl;
       CentIndex += MinOff;
       costNIt += MinOff;
       outNIt += MinOff;
       outNIt.SetCenterPixel(MarkLabel);
-//       outIt.SetIndex(CentIndex);
-//       outIt.Set(MarkLabel);
       inIt.SetIndex(CentIndex);
       progress.CompletedPixel();
       if (inIt.Get() == StartLabel)
@@ -411,7 +407,43 @@ MinimalPathImageFilter<TInputImage, TLabelImage>
 	break;
 	}
     }
-
+#else
+  outIt.SetIndex(CentIndex);
+  outIt.Set(MarkLabel);
+  inIt.SetIndex(CentIndex);
+  for (;;)
+    {
+      typename CNCostIterator::ConstIterator cIt;
+      // look for the smallest neighbor in the cost image
+      CostPixType MN = NumericTraits<CostPixType>::max();
+      InputImageOffsetType MinOff;
+      // slightly more complex version which checks to see whether we
+      // have already marked a voxel as being on the path to avoid
+      // loops in zero cost zones
+      for (cIt = costNIt.Begin(); cIt != costNIt.End(); ++cIt)
+	{
+	  CostPixType NVal = cIt.Get();
+	  //std::cout << NVal << " " << cIt.GetNeighborhoodOffset() << " " ;
+	  if (NVal < MN)
+	    {
+	    MN = NVal;
+	    MinOff = cIt.GetNeighborhoodOffset();
+	    }
+	  }
+	}
+      CentIndex += MinOff;
+      costNIt += MinOff;
+      outIt.SetIndex(CentIndex);
+      outIt.Set(MarkLabel);
+      inIt.SetIndex(CentIndex);
+      progress.CompletedPixel();
+      if (inIt.Get() == StartLabel)
+	{
+	// reached the start label
+	break;
+	}
+    }
+#endif
 }
 
 template <class TInputImage, class TLabelImage>
